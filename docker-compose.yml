@@ -1,0 +1,30 @@
+services:
+  community-chome:
+    container_name: community-chome
+    build: .
+    restart: unless-stopped
+    logging:            # журнал контейнера не растёт бесконечно
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      - "127.0.0.1:5050:5050"
+    env_file:
+      # Настройки почты (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM) — вне кода
+      - path: ${STAFF_DATA:-/opt/staff-data}/smtp.env
+        required: false
+      # Доступ к elpass (ELPASS_EMAIL, ELPASS_PASSWORD, необязательно ELPASS_URL) — турникет, опоздания
+      - path: ${STAFF_DATA:-/opt/staff-data}/elpass.env
+        required: false
+    environment:
+      - PORTAL_HTTPS=1
+      - MEDIA_ACCEL=1            # видео отдаёт nginx напрямую (X-Accel-Redirect), приложение только проверяет вход
+      - BACKUP_DIR=/app/backups   # копии базы и журнал обновлений — для админ-панели   # куки сессий только по HTTPS (снаружи портал за прокси с TLS)
+    volumes:
+      # ВАЖНО: данные лежат ВНЕ папки с кодом (${STAFF_DATA}, по умолчанию ~/staff-data),
+      # иначе git при обновлении кода может их удалить — так уже случалось 16.09.2026.
+      - ${STAFF_DATA:-/opt/staff-data}/portal.db:/app/portal.db
+      - ${STAFF_DATA:-/opt/staff-data}/uploads:/app/static/uploads
+      - ${STAFF_DATA:-/opt/staff-data}/api_key.txt:/app/api_key.txt:ro
+      - ${STAFF_BACKUPS:-/opt/staff-backups}:/app/backups

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connected Home — внутренний портал</title>
+<link rel="icon" type="image/png" href="{{ url_for('static', filename='logo-mark.png') }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Mulish:wght@500;600;700;800&family=Open+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ v }}">
+<script>
+// Шапка в одну строку на ноутбуках: решение принимает fitMasthead() в app.js и запоминает его. Здесь только применяем
+// запомненное до первой отрисовки, чтобы шапка не «прыгала» из двух строк в одну при каждой загрузке.
+try {
+  var h = (localStorage.getItem('portal_head') || '').split('|');
+  if (h[2] === '1' && +h[0] === window.innerWidth && h[1] === (localStorage.getItem('portal_lang') || 'ru'))
+    document.documentElement.classList.add('head-one-row');
+} catch (e) {}
+</script>
+</head>
+<body>
+<div class="app" id="app">
+
+  <div class="masthead">
+    <div class="brand" title="На главную" onclick="goHome()">
+      <img class="brand-mark-img" src="{{ url_for('static', filename='logo-mark.png') }}" alt="">
+      <div class="brand-wordmark">Connected<br>Community</div>
+    </div>
+
+    <div class="nav-tabs">
+      <div class="nav-item" data-view="news"><span>Новости</span></div>
+      <div class="nav-item has-menu" data-view="org" data-group="org,people">
+        <span>Сотрудники <i class="nav-caret">▾</i></span>
+        <div class="nav-menu">
+          <div class="nav-menu-item" data-view="org">Community Road Map</div>
+          <div class="nav-menu-item" data-view="people">Все сотрудники</div>
+        </div>
+      </div>
+      <div class="nav-item has-menu" data-view="projects" data-group="projects,partners">
+        <span>Компания <i class="nav-caret">▾</i></span>
+        <div class="nav-menu">
+          <div class="nav-menu-item" data-view="projects">Проекты</div>
+          <div class="nav-menu-item" data-view="partners">Наши партнёры</div>
+        </div>
+      </div>
+      <div class="nav-item" data-view="roadmap"><span>Новым сотрудникам</span></div>
+      <div class="nav-item" data-view="loyalty"><span>Программа лояльности</span></div>
+      <div class="nav-item" data-view="values"><span>Миссия и ценности</span></div>
+      <div class="nav-item" data-view="vacancies"><span>Вакансии</span></div>
+      <div class="nav-item has-menu" data-view="gallery_page" data-group="gallery_page,media_video">
+        <span>Медиа <i class="nav-caret">▾</i></span>
+        <div class="nav-menu">
+          <div class="nav-menu-item" data-view="gallery_page">Прошедшие ивенты</div>
+          <div class="nav-menu-item" data-view="media_video">Видео</div>
+        </div>
+      </div>
+      <div class="nav-item" data-view="knowledge"><span>База знаний</span></div>
+    </div>
+
+    <div class="masthead-actions">
+      <nav class="nav-social" aria-label="Компания в сети">
+        <a class="nav-social-link" href="https://www.instagram.com/connectedhome.kz/" target="_blank" rel="noopener noreferrer" title="Instagram"><i data-ico="instagram"></i></a>
+        <a class="nav-social-link" href="https://kz.linkedin.com/company/connected-home-kz" target="_blank" rel="noopener noreferrer" title="LinkedIn"><i data-ico="linkedin"></i></a>
+        <a class="nav-social-link" href="https://lp.connectedhome.kz/" target="_blank" rel="noopener noreferrer" title="Сайт компании"><i data-ico="globe"></i></a>
+      </nav>
+      <div class="lang-switch no-tr"></div>
+      <div class="nav-icon theme-btn" id="themeToggle" onclick="toggleTheme()" title="Тёмная тема">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </div>
+      <div class="nav-icon search-btn" onclick="openSearch()" title="Поиск по порталу (Ctrl+K)">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      </div>
+      <div class="nav-item nav-icon" data-view="profile" title="Личный кабинет">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      </div>
+      <div class="nav-item nav-icon" data-view="settings" title="Настройки">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </div>
+      <div class="nav-icon logout-btn" onclick="doLogout()" title="Выйти из аккаунта">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M13 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="body-row">
+    <nav class="sidenav" id="sidenav">
+      <div class="sidenav-title">Инструменты</div>
+      <div class="nav-item side" data-view="aibot" title="Connect AI"><i><img src="{{ url_for('static', filename='bot-mark.svg') }}" alt=""></i><span>Connect AI</span></div>
+      <div class="nav-item side" data-view="events" title="Календарь"><i data-ico="calendar"></i><span>Календарь</span></div>
+      <div class="nav-item side" data-view="requests" title="Заявки"><i data-ico="file"></i><span>Заявки</span></div>
+      <div class="nav-item side" data-view="tasks" title="Задачи"><i data-ico="check"></i><span>Задачи</span></div>
+      <div class="nav-item side" data-view="templates" title="Шаблоны документов"><i data-ico="clipboard"></i><span>Шаблоны документов</span></div>
+      <div class="nav-item side" data-view="attendance" title="Посещаемость"><i data-ico="calendar"></i><span>Посещаемость</span></div>
+      <div class="nav-item side" data-view="vacation" title="Мой отпуск"><i data-ico="sun"></i><span>Мой отпуск</span></div>
+      <div class="nav-item side" data-view="office" title="Карта офиса"><i data-ico="map"></i><span>Карта офиса</span></div>
+      <div class="nav-item side" data-view="manager" title="Кабинет руководителя"><i data-ico="award"></i><span>Кабинет руководителя</span></div>
+      <div class="nav-item side" data-view="suggestions" title="Предложения"><i data-ico="bulb"></i><span>Предложения</span></div>
+      <div class="nav-item side" data-view="games" title="Мини-игры"><i data-ico="gamepad"></i><span>Мини-игры</span></div>
+      <div class="sidenav-title staff-only" hidden>Отдел кадров</div>
+      <div class="nav-item side staff-only" data-view="hr" title="HR-панель" hidden><i data-ico="folder"></i><span>HR-панель</span></div>
+      <div class="sidenav-title buyer-only" hidden>Закупки</div>
+      <div class="nav-item side buyer-only" data-view="buyer" title="Панель закупщика" hidden><i data-ico="package"></i><span>Панель закупщика</span></div>
+      <div class="sidenav-title accountant-only" hidden>Бухгалтерия</div>
+      <div class="nav-item side accountant-only" data-view="accountant" title="Панель бухгалтера" hidden><i data-ico="receipt"></i><span>Панель бухгалтера</span></div>
+      <div class="sidenav-title admin-only" hidden>Администрирование</div>
+      <div class="nav-item side admin-only" data-view="admin" title="Админ-панель" hidden><i data-ico="settings"></i><span>Админ-панель</span></div>
+    </nav>
+    <button class="sidenav-handle" onclick="toggleSidenav()" title="Свернуть / развернуть панель" aria-label="Свернуть или развернуть панель инструментов">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+    </button>
+    <div class="main" id="main">
+      <div class="loading">Загрузка…</div>
+    </div>
+    <aside class="side-widgets" id="sideWidgets"></aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="site-footer-inner"><span class="site-footer-credit">Design by Tim</span></div>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="{{ url_for('static', filename='i18n.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='i18n-auto.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}?v={{ v }}"></script>
+</body>
+</html>

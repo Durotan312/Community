@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Connect AI: умный дом, который «живой» — контур дома и линия пульса внутри -->
+  <path d="M12 27 L32 11 L52 27 V52 H12 Z" stroke="#FF6600" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M17 41 H24 L28 33 L34 47 L38 41 H47" stroke="#FF6600" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

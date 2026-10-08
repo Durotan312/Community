@@ -1,0 +1,8 @@
+api_key.txt
+portal.db
+*.db
+static/uploads/*
+!static/uploads/.gitkeep
+__pycache__/
+*.pyc
+.env

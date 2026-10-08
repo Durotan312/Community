@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- то же для тёмного/оранжевого фона: шапка чата, активный пункт меню -->
+  <path d="M12 27 L32 11 L52 27 V52 H12 Z" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M17 41 H24 L28 33 L34 47 L38 41 H47" stroke="#FFFFFF" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

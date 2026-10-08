@@ -1,0 +1,15 @@
+.git
+.venv
+__pycache__
+*.pyc
+1-START.bat
+2-SAVE.bat
+3-SERVER.bat
+connected_staff.md
+portal.db
+portal.db-*
+backups
+checks
+docs
+.githooks
+.claude

@@ -1,0 +1,8 @@
+*.sh text eol=lf
+*.bat text eol=crlf
+
+# хук и скрипты для сервера — только LF, иначе sh споткнётся о ; образцы файлов — двоичные
+.githooks/* text eol=lf
+checks/*.sh text eol=lf
+*.pdf binary
+*.docx binary
