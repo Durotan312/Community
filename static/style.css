@@ -3575,3 +3575,12 @@ body.cw-mode .main{max-width:none;}
 }
 /* мини-игры на широком экране — четыре в ряд */
 @media (min-width:1100px){ .games-grid{grid-template-columns:repeat(4,minmax(0,1fr));} }
+
+/* WorkFlow — справочник агентов (08.10.2026) */
+.cw-agent-card{cursor:default;}
+.cw-agent-card:hover{border-color:var(--border);box-shadow:none;}
+.cw-agent-card .val-head{align-items:center;}
+.cw-agent-card .cw-user-text{flex:1;min-width:0;}
+.cw-agent-card .cw-user-text h3{margin:0;font-size:17px;}
+.cw-agent-card .cw-user-text small{display:block;color:var(--ink-soft);font-size:12.5px;}
+.cw-agent-ava{width:40px;height:40px;font-size:14px;flex-shrink:0;}

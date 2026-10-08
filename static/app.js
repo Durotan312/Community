@@ -1159,28 +1159,29 @@ async function renderCowork(main) {
   // адрес: projects | settings | <ключ проекта>.<chat|tasks|notes|materials|task-<id>>; старые #cowork/chat и #cowork/task-<id> — в последний проект
   let raw = state.coworkTab || 'projects', tab = raw, openId = null;
   if (raw.includes('.')) { const [pk, t] = raw.split('.', 2); if (cwProject(pk)) { cwSetProject(pk); tab = t || 'chat'; } else tab = 'projects'; }
-  else if (raw !== 'projects' && raw !== 'settings') {
+  else if (raw !== 'projects' && raw !== 'settings' && raw !== 'agents') {
     let pk = cw.project; try { pk = pk || localStorage.getItem('cw_project') || ''; } catch (e) { /* приватный режим */ }
     const t = cw.tasks.find(x => x.id === raw || 'task-' + x.id === raw);
     if (t) pk = t.project;
     if (cwProject(pk)) { cwSetProject(pk); tab = t ? 'task-' + t.id : raw; } else tab = 'projects';
   }
   if (tab.startsWith('task-')) { openId = tab.slice(5); tab = 'tasks'; }
-  const inProject = tab !== 'projects' && tab !== 'settings' && !!cwProject();
+  const inProject = tab !== 'projects' && tab !== 'settings' && tab !== 'agents' && !!cwProject();
   if (tab === 'settings' && !isAdmin()) tab = 'projects';
-  if (!inProject && tab !== 'settings') tab = 'projects';
+  if (!inProject && tab !== 'settings' && tab !== 'agents') tab = 'projects';
   if (inProject && !CW_NAV.some(x => x[0] === tab)) tab = 'chat';
-  state.coworkTab = tab === 'projects' || tab === 'settings' ? tab : cw.project + '.' + (openId ? 'task-' + openId : tab);
+  state.coworkTab = ['projects', 'settings', 'agents'].includes(tab) ? tab : cw.project + '.' + (openId ? 'task-' + openId : tab);
   const u = state.user || {}, pr = inProject ? cwProject() : null;
   const navItem = (k, name, icon, go) => `<a class="cw-nav${k === tab ? ' active' : ''}" href="#" onclick="${go};return false;">${ico(icon)}<span>${name}</span>${k === 'tasks' && isAdmin() ? cwReviewCount() : ''}</a>`;
-  const titles = { chat: 'Чат-агент', tasks: openId ? 'Задание' : 'Задания', projects: 'Проекты', notes: 'Замечания', materials: 'Материалы', settings: 'Настройки' };
-  const crumbs = (tab === 'settings' ? 'Управление' : pr ? pr.name : 'Проекты') + (pr || tab === 'settings' ? ' · ' + titles[tab] : '');
+  const titles = { chat: 'Чат-агент', tasks: openId ? 'Задание' : 'Задания', projects: 'Проекты', agents: 'Агенты', notes: 'Замечания', materials: 'Материалы', settings: 'Настройки' };
+  const crumbs = (tab === 'settings' ? 'Управление' : pr ? pr.name : 'Планирование') + (pr || !inProject ? ' · ' + titles[tab] : '');
   let body = '';
   if (openId) {
     const t = cw.tasks.find(x => x.id === openId);
     body = t ? coworkTaskHtml(t) : '<div class="empty"><strong>Задание не найдено</strong></div>';
   } else if (tab === 'chat') body = cwChatHtml();
   else if (tab === 'tasks') body = coworkListHtml();
+  else if (tab === 'agents') body = cwAgentsHtml();
   else if (tab === 'projects') { body = cwProjectsHtml(); if (isAdmin() && !cw.settings) fetchJson('/api/cowork/settings').then(x => { if (x) { cw.settings = x; cw.settingsAt = Date.now(); } }); }
   else if (tab === 'notes') body = '<div id="cwNotesAll" class="empty"><strong>Загрузка…</strong></div>';
   else if (tab === 'materials') body = '<div id="cwMaterials" class="empty"><strong>Загрузка…</strong></div>';
@@ -1193,7 +1194,7 @@ async function renderCowork(main) {
         <div class="cw-proj-head"><div class="cw-proj-mark">${ico('layers')}</div><div class="cw-user-text"><b>${escapeHtml(pr.name)}</b><small>${escapeHtml(pr.short || '')}</small></div></div>
         <div class="cw-group">Планирование</div>
         ${CW_NAV.map(([k, name, icon]) => navItem(k, name, icon, `cwGo(${jsArg(k)})`)).join('')}`
-        : `<div class="cw-group">Планирование</div>${navItem('projects', 'Проекты', 'layers', "state.coworkTab='projects';render()")}`}
+        : `<div class="cw-group">Планирование</div>${navItem('projects', 'Проекты', 'layers', "state.coworkTab='projects';render()")}${navItem('agents', 'Агенты', 'users', "state.coworkTab='agents';render()")}`}
         ${isAdmin() ? `<div class="cw-group">Управление</div>${navItem('settings', 'Настройки', 'settings', "state.coworkTab='settings';render()")}` : ''}
         ${u.cw_login ? `<a class="cw-nav" href="#" onclick="cwLogout();return false;">${ico('lock')}<span>Выйти из WorkFlow</span></a>` : ''}
         <a class="cw-nav cw-exit" href="#home" onclick="goToView('home');return false;">${ico('home')}<span>На портал</span></a>
@@ -1218,6 +1219,7 @@ async function renderCowork(main) {
   else if (tab === 'notes') cwRenderNotesAll();
   else if (tab === 'materials') cwRenderMaterials();
   else if (tab === 'settings') cwRenderSettings();
+  else if (tab === 'agents') cwRenderAgents();
   if (!cwOnbDone()) { try { localStorage.setItem('cw_onboarding', 'done'); } catch (e) { /* приватный режим */ } cwOnboarding(0, true); }
 }
 // задание в работе или в очереди — карточка сама обновляется раз в 15 секунд
@@ -1247,6 +1249,34 @@ function coworkListHtml() {
       ${cwStatus(t)}
     </div>`).join('');
   return `<div class="cw-list no-tr">${rows || '<div class="empty"><strong>Заданий пока нет</strong></div>'}</div>`;
+}
+
+// справочник агентов WorkFlow (08.10.2026, слова пользователя: «надо, чтобы были в справочнике на WorkFlow», а не среди
+// сотрудников портала). Должности — по-английски, как у «Технологий». Состояние считается по настройкам исполнителя.
+const CW_AGENTS = [
+  ['Connect Intake', 'AI Intake Agent', 'Приёмщик заданий', 'Уточняет просьбу в чате и собирает карточку задания: раздел, что сделать, кто увидит, как проверить.', 'intake'],
+  ['Connect Developer', 'AI Developer Agent', 'Разработчик', 'Берёт задание из очереди, правит код проекта в своей копии, прогоняет проверки и открывает merge request.', 'executor'],
+  ['Connect Reviewer', 'AI Code Reviewer', 'Проверяющий', 'Сверяет правку с правилами проекта до того, как её увидит владелец.', 'soon'],
+  ['Connect QA', 'AI QA Engineer', 'Тестировщик', 'Запускает проверки, открывает приложение и прикладывает снимок экрана.', 'soon'],
+  ['Connect Security', 'AI Security Engineer', 'Безопасник', 'Смотрит правки, которые касаются входа, прав и личных данных.', 'soon'],
+];
+function cwAgentsHtml() { return '<div id="cwAgents" class="cw-proj-grid no-tr"><div class="empty"><strong>Загрузка…</strong></div></div>'; }
+async function cwRenderAgents() {
+  const box = document.getElementById('cwAgents');
+  if (!box) return;
+  if (isAdmin() && (!cw.settings || Date.now() - (cw.settingsAt || 0) > 20000)) { cw.settings = await fetchJson('/api/cowork/settings'); cw.settingsAt = Date.now(); }
+  const s = cw.settings || {}, ex = s.executor || {};
+  const stateOf = k => k === 'intake' ? (s.ai_key || !isAdmin() ? ['работает', 'done'] : ['нет ключа AI', 'cancelled'])
+    : k === 'executor' ? (ex.alive ? ['работает', 'done'] : ex.configured ? ['не отвечает', 'queued'] : ['не подключён', 'cancelled'])
+    : ['следующая итерация', 'cancelled'];
+  box.innerHTML = CW_AGENTS.map(([name, title, role, about, k]) => { const [txt, cls] = stateOf(k); return `
+    <div class="val-block cw-proj-card cw-agent-card">
+      <div class="val-head"><div class="org-ava cw-agent-ava" style="--h:${hueOf(name)}">${initials(name)}</div>
+        <div class="cw-user-text"><h3 class="cw-title">${escapeHtml(name)}</h3><small>${escapeHtml(title)}</small></div>
+        <span class="req-status cw-status ${cls}">${txt}</span></div>
+      <div class="cw-proj-short">${escapeHtml(role)}</div>
+      <div class="emp-profile-text">${escapeHtml(about)}</div>
+    </div>`; }).join('');
 }
 
 // страница «Проекты»: карточки продуктов с описанием для агента; правит админ
