@@ -13,6 +13,7 @@ const state = {
 // ico('calendar') → инлайн-SVG, размер = font-size родителя, цвет = currentColor.
 // =========================================================
 const ICONS = {
+  robot: '<rect x="4" y="9" width="16" height="11" rx="3"/><circle cx="9" cy="14.5" r="1" fill="currentColor"/><circle cx="15" cy="14.5" r="1" fill="currentColor"/><path d="M12 9V5M12 5H9M1 13v4M23 13v4"/>',
   gitBranch: '<circle cx="6" cy="4" r="2.5"/><circle cx="6" cy="20" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 6.5v11M18 10.5c0 5-7 4-12 7"/>',
   code: '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
   shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
