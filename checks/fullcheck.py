@@ -205,7 +205,27 @@ cwb = EMP.post("/api/cowork/chat", json={"message": "ещё раз", "history": 
 check(cwb.status_code == 200 and cwb.get_json().get("task") is None and "[[ЗАДАНИЕ]]" not in cwb.get_json().get("reply", "") and "Не получилось" in cwb.get_json().get("reply", ""), "кривой JSON от модели — понятный ответ, не ошибка сервера")
 app.call_gemini = _real_gemini; app.get_api_key = _real_key
 ct = ok(EMP.post("/api/cowork/tasks", json={"title": cwr["task"]["title"], "spec": cwr["task"], "chat": [{"role": "user", "text": "хочу кнопку печати"}]}), "задание отправлено в работу")
-check(bool(ct) and ct["status"] == "queued" and ct["spec"]["section"] == "Заявки", "задание в очереди с разобранной карточкой")
+check(bool(ct) and ct["status"] == "queued" and ct["spec"]["section"] == "Заявки" and ct["project"] == "community", "задание в очереди с разобранной карточкой, проект по умолчанию — Community")
+# проекты (08.10.2026): все продукты компании, задания по каждому
+pj = EMP.get("/api/cowork/projects").get_json()
+check(isinstance(pj, list) and {p["key"] for p in pj} >= {"community", "aiva", "elpass", "elpark", "chapp", "wallee"}, "шесть продуктов компании заведены в WorkFlow")
+check(EMP.put("/api/cowork/projects/aiva", json={"name": "x"}).status_code == 403 and EMP.post("/api/cowork/projects", json={"key": "z", "name": "z"}).status_code == 403, "проекты ведёт только админ")
+check(ADM.put("/api/cowork/projects/aiva", json={"body": "Описание AIVA для теста", "repo": "javascript:alert(1)"}).get_json()["repo"] == "", "админ правит описание проекта, вредная ссылка на репозиторий отброшена")
+app.call_gemini = lambda model, key, system, contents: (True, ("AIVA-OK" if "Описание AIVA для теста" in system else "NO") + chr(10) + '[[ЗАДАНИЕ]] {"title": "Порог тревоги", "section": "Уведомления", "what": "x", "who": "x", "check": "x"}')
+app.get_api_key = lambda: _real_key() or "test-key"
+cwa = EMP.post("/api/cowork/chat", json={"message": "хочу порог тревоги", "history": [], "project": "aiva"}).get_json()
+check(bool(cwa) and cwa.get("reply") == "AIVA-OK" and cwa.get("task", {}).get("project") == "aiva", "приёмщик получает описание выбранного проекта, карточка помнит проект")
+app.call_gemini = _real_gemini; app.get_api_key = _real_key
+cta = ok(EMP.post("/api/cowork/tasks", json={"title": "Порог тревоги", "spec": {"what": "x"}, "project": "aiva"}), "задание по AIVA")
+check(bool(cta) and cta["project"] == "aiva" and EMP.post("/api/cowork/tasks", json={"title": "x", "spec": {"what": "x"}, "project": "nope"}).get_json()["project"] == "community", "проект задания сохраняется, неизвестный проект — Community")
+check(ADM.delete("/api/cowork/projects/aiva").status_code == 400 and ADM.delete("/api/cowork/projects/community").status_code == 400, "проект с заданиями и сам Community не удалить")
+npj = ok(ADM.post("/api/cowork/projects", json={"key": "Test Proj!", "name": "Тестовый", "status": "weird"}), "админ добавил проект")
+check(bool(npj) and npj["key"] == "testproj" and npj["status"] == "soon", "ключ проекта очищен до латиницы, неизвестный статус — «не подключён»")
+check(ADM.post("/api/cowork/projects", json={"key": "testproj", "name": "Дубль"}).status_code == 400, "повторный ключ проекта не принимается")
+ok(ADM.delete("/api/cowork/projects/testproj"), "проект без заданий удалён")
+mtp = ok(ADM.post("/api/cowork/materials", json={"title": "Про AIVA", "project": "aiva"}), "материал привязан к проекту")
+check(bool(mtp) and mtp["project"] == "aiva" and ADM.post("/api/cowork/materials", json={"title": "Общий", "project": "nope"}).get_json()["project"] == "", "материал помнит проект, неизвестный — общий")
+db.execute("DELETE FROM cowork_materials"); db.commit()
 check(EMP.post("/api/cowork/tasks", json={"title": "", "spec": {}}).status_code == 400, "пустое задание не принимается")
 check(BUY.get("/api/cowork/tasks").status_code == 403, "закупщик без входа в WorkFlow список не видит")
 check(ADM.get("/api/cowork/tasks").get_json()[0]["chat"] is not None, "админ видит переписку задания")

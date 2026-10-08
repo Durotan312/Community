@@ -161,7 +161,20 @@ SCHEMA = {
         "status": "TEXT NOT NULL DEFAULT 'queued'",   # queued → running → review → accepted / rejected / failed / cancelled
         "pr_url": "TEXT",                # ссылка на изменение (pull request в открытом репозитории)
         "result": "TEXT",                # отчёт исполнителя или комментарий владельца
+        "project": "TEXT NOT NULL DEFAULT 'community'",   # к какому продукту задание (08.10.2026): ключ из cowork_projects
         "created": "TEXT NOT NULL",
+        "updated": "TEXT NOT NULL",
+    },
+    "cowork_projects": {                 # продукты компании, по которым агенты принимают задания (08.10.2026: «все наши проекты»)
+        "key": "TEXT PRIMARY KEY",       # community, aiva, elpass, elpark, chapp, wallee
+        "name": "TEXT NOT NULL",
+        "short": "TEXT",                 # одной строкой: что это
+        "body": "TEXT",                  # описание для агента: что за продукт, из чего состоит, что важно
+        "owner": "TEXT",                 # кто отвечает (к кому идти с вопросом)
+        "repo": "TEXT",                  # репозиторий кода
+        "stack": "TEXT",                 # на чём написано
+        "status": "TEXT NOT NULL DEFAULT 'active'",   # active — агент подключён; soon — описан, задания копятся в очереди
+        "sort": "INTEGER NOT NULL DEFAULT 0",
         "updated": "TEXT NOT NULL",
     },
     "cowork_accounts": {                 # учётки WorkFlow (08.10.2026): вход внутрь WorkFlow отдельным логином super…
@@ -183,6 +196,7 @@ SCHEMA = {
     },
     "cowork_materials": {                # материалы для агента (08.10.2026): что он должен знать о продукте; ведёт админ
         "id": "TEXT PRIMARY KEY",
+        "project": "TEXT NOT NULL DEFAULT ''",   # к какому продукту материал; пусто — общий
         "title": "TEXT NOT NULL",
         "body": "TEXT",
         "url": "TEXT",
@@ -484,6 +498,42 @@ SCHEMA = {
 ATTENDANCE_ALIASES = {"О": "З"}
 
 
+# Продукты компании в Connected WorkFlow (08.10.2026, слова пользователя: «правки будут делать не только для Community —
+# все наши проекты: Connected Community, Aiva, Elpass, Elpark, CH App, Wallee Setup; к каждому проекту описание»).
+# Описания ниже — черновик Claude по данным портала (хвост): админ правит их на вкладке «Проекты» в WorkFlow.
+# Сейчас агент подключён только к Community (открытый репозиторий); остальные — status 'soon': задания принимаются
+# и копятся в очереди, исполнитель появится, когда пользователь даст доступ к их коду.
+COWORK_PROJECTS_SEED = [
+    ("community", "Connected Community", "Внутренний портал компании",
+     "Внутренний портал Connected Home для сотрудников: новости, справочник, заявки с согласованием, задачи, база знаний, "
+     "Connect AI, календарь, карта офиса, HR-панель, админ-панель и Connected WorkFlow. Пользуются только сотрудники. "
+     "Разделы: Новости, Сотрудники, Компания (Проекты, Партнёры, Руководство), Новым сотрудникам, Программа лояльности, "
+     "Миссия и ценности, Медиа, База знаний, Заявки, Задачи, Шаблоны документов, Посещаемость, Мой отпуск, Карта офиса, "
+     "Кабинет руководителя, Предложения, Мини-игры, панели HR, закупщика, бухгалтера, админа, Личный кабинет.",
+     "Темирлан Абдуллаев", "Python (Flask), SQLite, чистый JavaScript", "active"),
+    ("aiva", "AIVA", "Видеоаналитика на ИИ",
+     "AI Video Analytics: камеры распознают людей и события, фиксируют нештатные ситуации и присылают уведомления. "
+     "Сценарии: безопасность ЖК и бизнес-центров, контроль периметра, подсчёт людей и аналитика потоков. "
+     "Разрабатывает ML Department.",
+     "Новиков Игорь (директор проектов), Кайрбаев Омар-Саян (ML Department)", "", "soon"),
+    ("elpass", "Elpass", "Система доступа по лицу",
+     "Face ID вместо карточек и ключей для бизнес-центров, ЖК и госучреждений. Терминалы Hikvision и Dahua, интеграция "
+     "с турникетами. Внедрено у Нацбанка РК и Службы госохраны; на Elpass работает и пропуск в наш офис.",
+     "Шарипов Ануар (владелец продукта), Арынғазы Динара (менеджер проекта)", "", "soon"),
+    ("elpark", "Elpark", "Распознавание номеров для парковок",
+     "Камера считывает госномер, сверяет со списком и открывает шлагбаум. Резиденты въезжают автоматически, гостям — "
+     "доступ на время по номеру, история въездов доступна управляющей компании. Работает в связке с Elpass.",
+     "Творогов Антон (менеджер продукта), Войцеховский Алексей (внедрение)", "", "soon"),
+    ("chapp", "CH App", "Мобильное приложение Connected Home",
+     "Приложение, из которого клиент управляет умным домом: свет, безопасность, шторы, климат, ТВ, сценарии. "
+     "Единое приложение для всех пакетов (Light, Standard, Business, Premium).",
+     "", "", "soon"),
+    ("wallee", "Wallee Setup", "Настройка и запуск Wallee",
+     "Инструмент настройки и запуска Wallee. Описание уточняется — заполните на вкладке «Проекты».",
+     "", "", "soon"),
+]
+
+
 def init_db():
     db = sqlite3.connect(DB_PATH)
     for table, cols in SCHEMA.items():
@@ -511,6 +561,11 @@ def init_db():
             "INSERT INTO about (id, title, body) VALUES ('main', ?, ?)",
             ("Добро пожаловать в команду!", ""),
         )
+    # продукты для Connected WorkFlow (08.10.2026): заводятся один раз, дальше описания правит админ на вкладке «Проекты»
+    for i, (key, name, short, body, owner, stack, status) in enumerate(COWORK_PROJECTS_SEED):
+        db.execute("INSERT OR IGNORE INTO cowork_projects (key, name, short, body, owner, repo, stack, status, sort, updated) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                   (key, name, short, body, owner, "https://github.com/Durotan312/Community" if key == "community" else "", stack, status, i,
+                    datetime.now().isoformat(timespec="seconds")))
     # разовые переводы данных; повторный запуск ничего не меняет
     for old, new in ATTENDANCE_ALIASES.items():
         db.execute("UPDATE attendance SET code=? WHERE code=?", (new, old))
@@ -2924,6 +2979,7 @@ def _services_state(db):
     add("cowork", "Connected WorkFlow", cw_state, {"off": "нет ключа AI", "bad": "приёмщик не отвечает", "ok": "работает"}[cw_state],
         [("В очереди", q.get("queued", 0)), ("Ждут приёмки", q.get("review", 0)), ("Принято", q.get("accepted", 0)),
          ("Исполнитель", "не подключён — этап 2 (GitHub)"), ("Замечаний", db.execute("SELECT COUNT(*) FROM cowork_notes").fetchone()[0]),
+         ("Проектов", db.execute("SELECT COUNT(*) FROM cowork_projects").fetchone()[0]),
          ("Последнее сообщение", _svc_when(m.get("ok_at"))),
          ("Последняя ошибка", f"{m.get('err')} ({_svc_when(m.get('err_at'))})" if m.get("err_at") else "")])
     return out
@@ -6197,26 +6253,41 @@ def values_put(key):
 # этап 2 — исполнитель (docs/cowork.md).
 COWORK_PER_HOUR = 60
 COWORK_PROMPT = """Ты — приёмщик заданий в Connected WorkFlow, инструменте внутреннего портала компании Connected Home. \
-К тебе приходят менеджеры и аналитики, которые хотят что-то изменить на портале. Твоя работа — превратить просьбу в чёткое \
-задание для разработчика, не делая его самому.
+К тебе приходят менеджеры и аналитики, которые хотят что-то изменить в одном из продуктов компании, не привлекая разработчика. \
+Твоя работа — превратить просьбу в чёткое задание для агента-разработчика, не делая его самому.
 
-Разделы портала: Новости, Сотрудники (справочник, Community Road Map), Компания (Проекты, Партнёры, Руководство), \
-Новым сотрудникам, Программа лояльности, Миссия и ценности, Вакансии, Медиа (ивенты, видео), База знаний, \
-Connect AI (помощник), Календарь, Заявки (командировка, техника, отпуск, увольнение, компенсация и другие), Задачи, \
-Шаблоны документов, Посещаемость, Мой отпуск, Карта офиса, Кабинет руководителя, Предложения, Мини-игры, \
-HR-панель, Панель закупщика, Панель бухгалтера, Админ-панель, Личный кабинет.
+{project}
 
 Как работать:
 - Отвечай по-русски, коротко, простым текстом без markdown и без звёздочек.
 - Если непонятно, задай не больше одного уточняющего вопроса за раз; всего уточнений — не больше трёх. \
-Выясни: в каком разделе, что именно должно измениться на экране, кто это увидит (все, HR, руководители…), как понять, что сделано.
+Выясни: в каком разделе или экране продукта, что именно должно измениться, кто это увидит (все, HR, руководители, клиенты…), как понять, что сделано.
 - Не проси личные данные людей (телефоны, паспорта, зарплаты) — заданию они не нужны.
 - Когда всё ясно, напиши одну фразу «Собрал задание, проверьте карточку» и в самой последней строке выведи ровно: \
 [[ЗАДАНИЕ]] {"title": "...", "section": "...", "what": "...", "who": "...", "check": "..."}
-где title — короткое название (до 60 знаков), section — раздел портала, what — что сделать (2–4 предложения), \
+где title — короткое название (до 60 знаков), section — раздел или экран продукта, what — что сделать (2–4 предложения), \
 who — кто увидит, check — как проверить. JSON в одну строку, без переносов."""
 
 _cowork_log = {}
+
+
+def _cowork_project(db, key):
+    """Продукт по ключу; неизвестный ключ — Community (там агент точно есть)."""
+    key = (key or "community").strip().lower()[:40]
+    row = db.execute("SELECT * FROM cowork_projects WHERE key=?", (key,)).fetchone()
+    return row or db.execute("SELECT * FROM cowork_projects WHERE key='community'").fetchone()
+
+
+def _cowork_prompt(pr):
+    """Промпт приёмщика с описанием выбранного продукта (08.10.2026: задания по всем проектам компании)."""
+    lines = ["Сейчас речь о продукте «%s» — %s." % (pr["name"], pr["short"] or "")]
+    if pr["body"]:
+        lines.append("Описание продукта: " + pr["body"])
+    if pr["owner"]:
+        lines.append("Кто отвечает за продукт: " + pr["owner"] + ".")
+    if pr["stack"]:
+        lines.append("На чём написан: " + pr["stack"] + ".")
+    return COWORK_PROMPT.replace("{project}", chr(10).join(lines))
 
 
 def _cowork_json(r):
@@ -6252,9 +6323,11 @@ def cowork_chat():
         if isinstance(m, dict) and m.get("role") in ("user", "bot") and str(m.get("text") or "").strip():
             contents.append({"role": "user" if m["role"] == "user" else "model", "parts": [{"text": str(m["text"])[:2000]}]})
     contents.append({"role": "user", "parts": [{"text": message}]})
+    pr = _cowork_project(get_db(), data.get("project"))
+    prompt = _cowork_prompt(pr)
     reply, last_err = "", None
     for model in AI_MODELS:
-        ok, result = call_gemini(model, api_key, COWORK_PROMPT, contents)
+        ok, result = call_gemini(model, api_key, prompt, contents)
         if ok and str(result or "").strip():
             reply = str(result).strip()
             break
@@ -6269,6 +6342,7 @@ def cowork_chat():
             raw = json.loads(m.group(1), strict=False)          # модель может вставить перенос строки внутри текста
             task = {k: str(raw.get(k) or "").strip()[:1500] for k in ("title", "section", "what", "who", "check")}
             task["title"] = task["title"][:80] or "Задание"
+            task["project"] = pr["key"]
         except ValueError:
             task = None
         reply = reply[:m.start()].strip()
@@ -6304,11 +6378,12 @@ def cowork_tasks():
     chat = [m for m in (data.get("chat") or []) if isinstance(m, dict) and m.get("role") in ("user", "bot")][-40:]
     chat = [{"role": m["role"], "text": str(m.get("text") or "")[:2000]} for m in chat]
     now = datetime.now().isoformat(timespec="seconds")
+    pr = _cowork_project(db, data.get("project"))
     item = {"id": uuid.uuid4().hex, "author_id": user["id"], "author_name": user["name"] or user["login"], "title": title,
             "spec": json.dumps(spec, ensure_ascii=False), "chat": json.dumps(chat, ensure_ascii=False), "status": "queued",
-            "pr_url": "", "result": "", "created": now, "updated": now}
-    db.execute("INSERT INTO cowork_tasks (id, author_id, author_name, title, spec, chat, status, pr_url, result, created, updated) "
-               "VALUES (:id, :author_id, :author_name, :title, :spec, :chat, :status, :pr_url, :result, :created, :updated)", item)
+            "pr_url": "", "result": "", "project": pr["key"], "created": now, "updated": now}
+    db.execute("INSERT INTO cowork_tasks (id, author_id, author_name, title, spec, chat, status, pr_url, result, project, created, updated) "
+               "VALUES (:id, :author_id, :author_name, :title, :spec, :chat, :status, :pr_url, :result, :project, :created, :updated)", item)
     db.commit()
     return jsonify(_cowork_json(db.execute("SELECT * FROM cowork_tasks WHERE id=?", (item["id"],)).fetchone())), 201
 
@@ -6493,6 +6568,89 @@ def cowork_notes_all():
     return jsonify([dict(r) for r in rows])
 
 
+def _cowork_material_project(db, key):
+    """Продукт материала: пусто — общий, неизвестный ключ — тоже общий."""
+    key = str(key or "").strip().lower()[:40]
+    if key and db.execute("SELECT 1 FROM cowork_projects WHERE key=?", (key,)).fetchone() is None:
+        key = ""
+    return key
+
+
+# Проекты (08.10.2026): список продуктов, по которым принимаются задания. Читают вошедшие в WorkFlow, ведёт админ.
+COWORK_PROJECT_FIELDS = ("name", "short", "body", "owner", "repo", "stack", "status")
+
+
+def _cowork_project_json(db, r):
+    d = dict(r)
+    d["tasks"] = db.execute("SELECT COUNT(*) FROM cowork_tasks WHERE project=? AND status NOT IN ('accepted','rejected','cancelled')", (r["key"],)).fetchone()[0]
+    d["materials"] = db.execute("SELECT COUNT(*) FROM cowork_materials WHERE project=?", (r["key"],)).fetchone()[0]
+    return d
+
+
+def _cowork_project_fields(data):
+    out = {}
+    for k in COWORK_PROJECT_FIELDS:
+        if k in data:
+            v = str(data.get(k) or "").strip()
+            out[k] = _clean_url(v) if k == "repo" else v[:200 if k in ("name", "short", "owner", "stack") else 8000]
+    if "status" in out and out["status"] not in ("active", "soon"):
+        out["status"] = "soon"
+    return out
+
+
+@app.route("/api/cowork/projects", methods=["GET", "POST"])
+def cowork_projects():
+    user = current_user()
+    if not _can_cowork(user):
+        return jsonify({"error": "Нет доступа."}), 403
+    db = get_db()
+    if request.method == "GET":
+        return jsonify([_cowork_project_json(db, r) for r in db.execute("SELECT * FROM cowork_projects ORDER BY sort, name")])
+    if user["role"] != "admin":
+        return jsonify({"error": "Проекты ведёт администратор."}), 403
+    data = request.get_json(silent=True) or {}
+    key = re.sub(r"[^a-z0-9_-]", "", str(data.get("key") or "").strip().lower())[:40]
+    f = _cowork_project_fields(data)
+    if not key or not f.get("name"):
+        return jsonify({"error": "Нужны ключ латиницей и название."}), 400
+    if db.execute("SELECT 1 FROM cowork_projects WHERE key=?", (key,)).fetchone():
+        return jsonify({"error": "Проект с таким ключом уже есть."}), 400
+    sort = (db.execute("SELECT COALESCE(MAX(sort), 0) FROM cowork_projects").fetchone()[0] or 0) + 1
+    db.execute("INSERT INTO cowork_projects (key, name, short, body, owner, repo, stack, status, sort, updated) VALUES (?,?,?,?,?,?,?,?,?,?)",
+               (key, f["name"], f.get("short", ""), f.get("body", ""), f.get("owner", ""), f.get("repo", ""), f.get("stack", ""), f.get("status", "soon"), sort,
+                datetime.now().isoformat(timespec="seconds")))
+    db.commit()
+    return jsonify(_cowork_project_json(db, db.execute("SELECT * FROM cowork_projects WHERE key=?", (key,)).fetchone())), 201
+
+
+@app.route("/api/cowork/projects/<key>", methods=["PUT", "DELETE"])
+def cowork_project(key):
+    user = current_user()
+    if not user or user["role"] != "admin":
+        return jsonify({"error": "Проекты ведёт администратор."}), 403
+    db = get_db()
+    key = key.lower()
+    if db.execute("SELECT 1 FROM cowork_projects WHERE key=?", (key,)).fetchone() is None:
+        return jsonify({"error": "Проект не найден."}), 404
+    if request.method == "DELETE":
+        if key == "community":
+            return jsonify({"error": "Community удалить нельзя — это сам портал."}), 400
+        if db.execute("SELECT 1 FROM cowork_tasks WHERE project=?", (key,)).fetchone():
+            return jsonify({"error": "У проекта есть задания — удалить нельзя."}), 400
+        db.execute("DELETE FROM cowork_projects WHERE key=?", (key,))
+        db.execute("UPDATE cowork_materials SET project='' WHERE project=?", (key,))
+        db.commit()
+        return jsonify({"deleted": key})
+    f = _cowork_project_fields(request.get_json(silent=True) or {})
+    if "name" in f and not f["name"]:
+        return jsonify({"error": "Нужно название."}), 400
+    if f:
+        sets = ", ".join(f"{k}=?" for k in f)
+        db.execute(f"UPDATE cowork_projects SET {sets}, updated=? WHERE key=?", (*f.values(), datetime.now().isoformat(timespec="seconds"), key))
+        db.commit()
+    return jsonify(_cowork_project_json(db, db.execute("SELECT * FROM cowork_projects WHERE key=?", (key,)).fetchone()))
+
+
 @app.route("/api/cowork/materials", methods=["GET", "POST"])
 def cowork_materials():
     """Материалы для агента: читают допущенные, ведёт админ."""
@@ -6510,8 +6668,9 @@ def cowork_materials():
         return jsonify({"error": "Нужно название."}), 400
     now = datetime.now().isoformat(timespec="seconds")
     mid = uuid.uuid4().hex
-    db.execute("INSERT INTO cowork_materials (id, title, body, url, created, updated) VALUES (?,?,?,?,?,?)",
-               (mid, title, str(data.get("body") or "").strip()[:8000], _clean_url(str(data.get("url") or "")), now, now))
+    project = _cowork_material_project(db, data.get("project"))
+    db.execute("INSERT INTO cowork_materials (id, project, title, body, url, created, updated) VALUES (?,?,?,?,?,?,?)",
+               (mid, project, title, str(data.get("body") or "").strip()[:8000], _clean_url(str(data.get("url") or "")), now, now))
     db.commit()
     return jsonify(dict(db.execute("SELECT * FROM cowork_materials WHERE id=?", (mid,)).fetchone())), 201
 
@@ -6531,8 +6690,9 @@ def cowork_material(item_id):
     title = str(data.get("title") or "").strip()[:200]
     if not title:
         return jsonify({"error": "Нужно название."}), 400
-    db.execute("UPDATE cowork_materials SET title=?, body=?, url=?, updated=? WHERE id=?",
-               (title, str(data.get("body") or "").strip()[:8000], _clean_url(str(data.get("url") or "")), datetime.now().isoformat(timespec="seconds"), item_id))
+    db.execute("UPDATE cowork_materials SET title=?, body=?, url=?, project=?, updated=? WHERE id=?",
+               (title, str(data.get("body") or "").strip()[:8000], _clean_url(str(data.get("url") or "")), _cowork_material_project(db, data.get("project")),
+                datetime.now().isoformat(timespec="seconds"), item_id))
     db.commit()
     return jsonify(dict(db.execute("SELECT * FROM cowork_materials WHERE id=?", (item_id,)).fetchone()))
 

@@ -3530,3 +3530,17 @@ body.cw-mode .main{max-width:none;}
 .cw-gate-box{width:min(420px,100%);background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:26px 28px;box-shadow:var(--shadow);}
 .cw-gate-box h2{font-family:'Mulish',sans-serif;font-size:22px;margin:14px 0 16px;}
 .cw-gate-box .login-error{min-height:18px;color:var(--danger);font-size:13px;margin-bottom:8px;}
+/* WorkFlow — проекты (08.10.2026): выбор продукта над чатом, фильтр заданий, карточки проектов */
+.cw-proj-bar{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);}
+.cw-list+.cw-proj-bar,.cw-proj-bar:first-child{border-bottom:0;padding:0 0 14px;}
+.cw-proj{border:1px solid var(--border);background:var(--surface);color:var(--ink);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;}
+.cw-proj:hover{border-color:var(--orange);color:var(--orange-dark);}
+.cw-proj.active{background:var(--orange);border-color:var(--orange);color:#fff;}
+.cw-proj-chip{display:inline-block;background:var(--orange-tint);color:var(--orange-dark);border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:700;margin-right:4px;vertical-align:1px;}
+.cw-proj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;}
+.cw-proj-card{margin:0;}
+.cw-proj-card .val-head{flex-wrap:wrap;}
+.cw-proj-card .val-head .btn.text{margin-left:auto;}
+.cw-proj-short{font-weight:600;margin-bottom:8px;}
+.cw-proj-actions{display:flex;justify-content:flex-end;margin-bottom:14px;}
+@media (max-width:720px){.cw-proj-grid{grid-template-columns:1fr;}}
