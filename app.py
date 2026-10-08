@@ -680,6 +680,7 @@ app.secret_key = _secret
 AUTH_FREE = {"/api/login", "/api/me", "/api/register"}
 AUTH_FREE_PREFIX = ("/api/invite/", "/api/cowork/runner/")   # исполнитель WorkFlow ходит без сессии, со своим секретом (08.10.2026)
 USER_WRITABLE = {
+    ("POST", "/api/me/view-as"),   # выход из режима «как сотрудник»: в этот момент роль уже «user», настоящую проверяет обработчик (08.10.2026)
     ("POST", "/api/ask"),
     ("POST", "/api/suggestions"),
     ("POST", "/api/requests"),           # подать заявку может любой сотрудник
@@ -756,6 +757,10 @@ def current_user():
                 session["pv"] = stamp            # вход до появления отпечатка — дописываем молча
             if session["pv"] == stamp:
                 g.user = {k: row[k] for k in ("id", "login", "name", "role", "cowork", "cowork_only")}
+                # «Смотреть как сотрудник» (08.10.2026): админ временно ходит по порталу с правами обычного сотрудника,
+                # сервер тоже считает его сотрудником — закрытые адреса отвечают отказом, как настоящему сотруднику
+                if g.user["role"] == "admin" and session.get("view_as") == "user":
+                    g.user["role"] = "user"; g.user["real_admin"] = True
     return g.user
 
 
@@ -798,6 +803,7 @@ def me_json(u):
     emp = _my_employee(get_db(), d)
     d["emp_id"] = emp["id"] if emp else None
     d["english"] = bool(emp and emp["english"])   # есть ли вкладка «Английский язык» в посещаемости
+    d["view_as"] = bool(u.get("real_admin"))      # админ смотрит портал как сотрудник (08.10.2026)
     d["cowork"] = _can_cowork(u)                  # допуск к Connected WorkFlow — current_user() это поле не грузит
     d["cowork_allowed"] = _cw_allowed(u)         # можно ли вообще входить в WorkFlow (08.10.2026: «пока права только у админа и у Миши»)
     d["cw_login"] = session.get("cw") or ""       # под какой учёткой WorkFlow вошли (пусто — ещё не входили)
@@ -930,6 +936,22 @@ def me():
     if not user:
         return jsonify({"error": "Нужно войти в портал.", "auth": "login"}), 401
     return jsonify(me_json(user))
+
+
+@app.route("/api/me/view-as", methods=["POST"])
+def me_view_as():
+    """Админ включает или выключает режим «Смотреть как сотрудник». Настоящая роль берётся из базы, а не из сессии."""
+    uid = session.get("uid")
+    row = get_db().execute("SELECT role FROM users WHERE id=?", (uid,)).fetchone() if uid else None
+    if not row or row["role"] != "admin":
+        return jsonify({"error": "Только для администратора."}), 403
+    on = bool((request.get_json(silent=True) or {}).get("on"))
+    if on:
+        session["view_as"] = "user"
+    else:
+        session.pop("view_as", None)
+    g.pop("user", None)
+    return jsonify(me_json(current_user()))
 
 
 @app.route("/api/me/password", methods=["POST"])

@@ -3592,3 +3592,6 @@ body.cw-mode .main{max-width:none;}
 .cw-denied h2{margin:0 0 8px;font-family:'Mulish',sans-serif;}
 .cw-denied p{color:var(--ink-soft);margin:0 0 18px;}
 .cw-denied .profile-actions{justify-content:center;}
+
+/* кнопка «Смотреть как сотрудник» в шапке (08.10.2026): включена — оранжевая */
+.view-as-btn.on{background:var(--orange);color:#fff;border-color:var(--orange);}

@@ -395,6 +395,7 @@ function syncNavActive() {
 window.addEventListener('popstate', () => { if (!state.user) return; applyHash(); closeModal(); render(); window.scrollTo(0, 0); });
 
 function render() {
+  updateViewAsBtn();
   if (state.user && (state.user.cowork_only || isWorkflowEntry()) && state.view !== 'cowork' && canCowork()) state.view = 'cowork';   // отдельный вход — только WorkFlow
   if (state.view !== 'office') state.officeSearch = '';   // поиск по карте офиса живёт только внутри раздела
   if (state.view !== 'games' && typeof gamesLeave === 'function') { gamesLeave(); state.game = null; }
@@ -7512,6 +7513,26 @@ function updateThemeBtn(dark) {
   b.innerHTML = dark
     ? '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>'
     : '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+}
+// «Смотреть как сотрудник» (08.10.2026, просьба пользователя перед показом: «мне там нужен обычный доступ»).
+// Кнопка-глаз в шапке только у админа; в режиме сотрудника кнопка оранжевая, и сервер отвечает ему как сотруднику.
+function updateViewAsBtn() {
+  const b = document.getElementById('viewAsBtn');
+  if (!b) return;
+  const u = state.user;
+  b.hidden = !(u && (u.role === 'admin' || u.view_as));
+  b.classList.toggle('on', !!(u && u.view_as));
+  b.title = u && u.view_as ? 'Вернуться к правам администратора' : 'Смотреть как сотрудник';
+}
+async function toggleViewAs() {
+  const on = !(state.user && state.user.view_as);
+  const res = await fetchJson('/api/me/view-as', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on }) });
+  if (!res) { showToast('Не удалось переключить'); return; }
+  state.user = res;
+  showToast(on ? 'Вы смотрите портал как сотрудник' : 'Права администратора возвращены');
+  cw.tasks = null; cw.settings = null;
+  if (on && ['admin', 'hr', 'buyer', 'accountant'].includes(state.view)) state.view = 'home';
+  render();
 }
 function toggleTheme() {
   setSetting('theme', document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
