@@ -356,7 +356,7 @@ function updateCounts() {
 // ---------- адрес страницы = текущий раздел ----------
 // Раздел и вкладка записываются в адрес после «#»: #news/gallery, #hr/requests, #projects/<id>.
 // Поэтому F5 оставляет человека там же, где он был, ссылкой на раздел можно поделиться, а «Назад» возвращает на шаг.
-const SUBSTATE = { attendance: 'attTab', news: 'newsTab', hr: 'hrTab', buyer: 'buyerTab', accountant: 'accTab', admin: 'adminTab', projects: 'projectOpen', requests: 'reqForm', manager: 'mgrTab', games: 'game', templates: 'tplTab', tasks: 'taskTab' };
+const SUBSTATE = { attendance: 'attTab', news: 'newsTab', hr: 'hrTab', buyer: 'buyerTab', accountant: 'accTab', admin: 'adminTab', projects: 'projectOpen', requests: 'reqForm', manager: 'mgrTab', games: 'game', templates: 'tplTab', tasks: 'taskTab', cowork: 'coworkOpen' };
 function viewToHash() {
   let sub = SUBSTATE[state.view] ? state[SUBSTATE[state.view]] : '';
   if (state.view === 'news' && sub === 'news') sub = '';   // лента новостей — вид по умолчанию, в адресе не пишем
@@ -420,6 +420,7 @@ function render() {
   if (state.view === 'messenger') return renderMessenger(main);
   if (state.view === 'loyalty') return renderLoyalty(main);
   if (state.view === 'values') return renderValues(main);
+  if (state.view === 'cowork') return renderCowork(main);
   if (state.view === 'partners') return renderPartners(main);
   if (state.view === 'hr') return isStaff() ? renderHr(main) : goHome();
   if (state.view === 'buyer') return seesBuyer() ? renderBuyer(main) : goHome();
@@ -1115,6 +1116,208 @@ async function clearProfile(employeeId) {
   const emp = state.employees.find(e => e.id === employeeId);
   if (emp) delete emp.profile;
   closeModal(); showToast('Профиль очищен'); render();
+}
+
+// ---------- Connected Cowork (08.10.2026) ----------
+// PM или аналитик пишет приёмщику, что изменить на портале; приёмщик уточняет и собирает карточку задания; в работу
+// отправляет сам человек кнопкой. Задания видны всем допущенным, принимает только админ (его решение: «ты, одной кнопкой»).
+const cw = { messages: [], draft: '', loading: false, tasks: null, chatOpen: false };
+const CW_STATUS = { queued: ['В очереди', 'queued'], running: ['В работе', 'running'], review: ['Ждёт приёмки', 'review'],
+  accepted: ['Принято', 'accepted'], rejected: ['Отклонено', 'rejected'], failed: ['Не удалось', 'failed'], cancelled: ['Отменено', 'cancelled'] };
+function canCowork() { return !!(state.user && (state.user.role === 'admin' || state.user.cowork)); }
+function cwStatus(t) { const s = CW_STATUS[t.status] || [t.status, '']; return `<span class="req-status cw-status ${s[1]}">${s[0]}</span>`; }
+
+async function renderCowork(main) {
+  if (!canCowork()) {
+    main.innerHTML = `<div class="section-head"><div><div class="section-title">Connected Cowork</div></div></div>
+      <div class="empty"><strong>Доступ выдаёт администратор</strong></div>`;
+    return;
+  }
+  if (cw.tasks === null || Date.now() - (cw.loadedAt || 0) > 20000) {
+    if (cw.tasks === null) main.innerHTML = '<div class="empty"><strong>Загрузка…</strong></div>';
+    const fresh = await fetchJson('/api/cowork/tasks');
+    if (fresh) { cw.tasks = fresh; cw.loadedAt = Date.now(); } else cw.tasks = cw.tasks || [];
+    if (state.view !== 'cowork') return;
+  }
+  const open = state.coworkOpen && cw.tasks.find(t => t.id === state.coworkOpen);
+  if (open) { renderCoworkTask(main, open); return; }
+  state.coworkOpen = null;
+  const rows = cw.tasks.map(t => `
+    <div class="req-row" onclick="state.coworkOpen=${jsArg(t.id)};render()">
+      <div class="req-row-mark">${ico('activity')}</div>
+      <div class="req-row-main">
+        <div class="req-row-title">${escapeHtml(t.title)}</div>
+        <div class="req-row-sub">${escapeHtml(t.author_name || '')} · ${fmtShortDate(t.created)}${t.spec && t.spec.section ? ' · ' + escapeHtml(t.spec.section) : ''}</div>
+      </div>
+      ${cwStatus(t)}
+    </div>`).join('');
+  main.innerHTML = `
+    <div class="section-head">
+      <div><div class="section-title">Connected Cowork</div></div>
+      <button class="btn" onclick="cwOpenChat()">Новое задание</button>
+    </div>
+    ${cw.chatOpen ? cwChatHtml() : ''}
+    <div class="cw-list no-tr">${rows || '<div class="empty"><strong>Заданий пока нет</strong></div>'}</div>`;
+  if (cw.chatOpen) cwPaint();
+}
+
+function renderCoworkTask(main, t) {
+  const sp = t.spec || {};
+  const mine = state.user && t.author_id === state.user.id;
+  const row = (k, v) => v ? `<div class="emp-profile-row"><span>${k}</span><div class="emp-profile-text">${escapeHtml(v)}</div></div>` : '';
+  main.innerHTML = `
+    <div class="section-head">
+      <div><div class="section-title">Задание</div></div>
+      <button class="btn secondary" onclick="state.coworkOpen=null;render()">К списку</button>
+    </div>
+    <div class="val-block no-tr">
+      <div class="val-head"><div class="val-mark">${ico('activity')}</div><h3 class="cw-title">${escapeHtml(t.title)}</h3>${cwStatus(t)}</div>
+      <div class="emp-profile-row"><span>Автор</span><div>${escapeHtml(t.author_name || '')} · ${fmtDate(t.created)}</div></div>
+      ${row('Раздел', sp.section)}${row('Что сделать', sp.what)}${row('Кто увидит', sp.who)}${row('Как проверить', sp.check)}
+      ${t.pr_url ? `<div class="emp-profile-row"><span>Изменение</span><div><a class="cw-link" href="${escapeHtml(t.pr_url)}" target="_blank" rel="noopener">${escapeHtml(t.pr_url)}</a></div></div>` : ''}
+      ${t.result ? row(t.status === 'rejected' ? 'Причина отказа' : 'Итог', t.result) : ''}
+      <div class="profile-actions">
+        ${(mine || isAdmin()) && ['queued', 'review', 'failed'].includes(t.status) ? `<button class="btn secondary" onclick="cwCancel(${jsArg(t.id)})">Отменить задание</button>` : ''}
+        ${['queued', 'running', 'review'].includes(t.status) ? `<button class="btn secondary" onclick="coworkLink(${jsArg(t.id)})">Приложить ссылку на изменение</button>` : ''}
+        ${t.status === 'review' ? `<button class="btn" onclick="coworkDecide(${jsArg(t.id)}, 'accept')">Принять</button>
+        <button class="btn secondary" onclick="coworkDecide(${jsArg(t.id)}, 'reject')">Отклонить</button>` : ''}
+      </div>
+    </div>
+    ${(t.chat || []).length ? `<div class="val-block"><div class="val-head"><div class="val-mark">${ico('chat')}</div><h3>Переписка с приёмщиком</h3></div>
+      <div class="chat-log cw-chat-static no-tr">${t.chat.map(m => m.role === 'user' ? `<div class="msg user"><div class="bubble">${escapeHtml(m.text).replace(/\n/g, '<br>')}</div></div>`
+        : `<div class="msg bot"><div class="msg-avatar"><img src="/static/bot-mark-white.svg" alt=""></div><div class="bubble bot">${escapeHtml(m.text).replace(/\n/g, '<br>')}</div></div>`).join('')}</div></div>` : ''}`;
+}
+
+function cwChatHtml() {
+  return `
+    <div class="chat-shell cw-chat">
+      <div class="chat-topbar">
+        <div class="chat-topbar-left">
+          <span class="ask-spark"><img src="/static/bot-mark-white.svg" alt=""></span>
+          <div><div class="chat-name">Приёмщик заданий</div><div class="chat-status">Уточнит и соберёт карточку задания</div></div>
+        </div>
+        <button class="btn secondary chat-new" onclick="cw.messages=[];cw.draft='';cw.chatOpen=false;render()">Закрыть</button>
+      </div>
+      <div class="chat-log no-tr" id="cwLog"></div>
+      <div class="chat-composer">
+        <textarea id="cwInput" rows="1" placeholder="Сообщение…" oninput="cw.draft=this.value; autoGrow(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();cwSend();}"></textarea>
+        <button class="chat-send" id="cwBtn" onclick="cwSend()" title="Отправить">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        </button>
+      </div>
+    </div>`;
+}
+function cwOpenChat() { cw.chatOpen = true; render(); const i = document.getElementById('cwInput'); if (i) { i.value = cw.draft; i.focus(); } }
+function cwPaint() {
+  const log = document.getElementById('cwLog'), btn = document.getElementById('cwBtn');
+  if (btn) btn.disabled = cw.loading;
+  if (!log) return;
+  if (!cw.messages.length && !cw.loading) {
+    log.innerHTML = `<div class="chat-empty"><div class="chat-empty-mark"><img src="/static/bot-mark-white.svg" alt=""></div>
+      <div class="chat-empty-title">Что изменить на портале?</div></div>`;
+    return;
+  }
+  let html = cw.messages.map((m, i) => {
+    if (m.role === 'user') return `<div class="msg user"><div class="bubble">${escapeHtml(m.text).replace(/\n/g, '<br>')}</div></div>`;
+    const card = m.task ? `
+      <div class="draft-card${m.sent ? ' sent' : ''}">
+        <div class="draft-head">${ico('activity')}<span>${escapeHtml(m.task.title)}</span></div>
+        <div class="draft-body no-tr">${['section', 'what', 'who', 'check'].filter(k => m.task[k]).map(k => `<div class="req-field"><span>${({section: 'Раздел', what: 'Что сделать', who: 'Кто увидит', check: 'Как проверить'})[k]}</span><b>${escapeHtml(m.task[k])}</b></div>`).join('')}</div>
+        <div class="draft-foot">${m.sent ? `<div class="draft-done">${ico('check')} Отправлено в работу</div>` : `<button class="btn" onclick="cwSubmitTask(${i})">Отправить в работу</button>`}</div>
+      </div>` : '';
+    return `<div class="msg bot"><div class="msg-avatar"><img src="/static/bot-mark-white.svg" alt=""></div><div class="bot-col"><div class="bubble bot${m.role === 'error' ? ' error' : ''}">${escapeHtml(m.text).replace(/\n/g, '<br>')}</div>${card}</div></div>`;
+  }).join('');
+  if (cw.loading) html += `<div class="msg bot"><div class="msg-avatar"><img src="/static/bot-mark-white.svg" alt=""></div><div class="bubble bot thinking"><span class="ask-dots"><i></i><i></i><i></i></span></div></div>`;
+  log.innerHTML = html;
+  log.scrollTop = log.scrollHeight;
+}
+async function cwSend() {
+  const input = document.getElementById('cwInput');
+  if (!input || cw.loading) return;
+  const message = input.value.trim();
+  if (!message) return;
+  const history = cw.messages.filter(m => m.role !== 'error').map(m => ({ role: m.role, text: m.text }));
+  cw.messages.push({ role: 'user', text: message });
+  cw.draft = ''; input.value = ''; autoGrow(input);
+  cw.loading = true; cwPaint();
+  let r, res;
+  try {
+    r = await fetch('/api/cowork/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message, history }) });
+    res = await r.json().catch(() => ({}));
+  } catch (e) { r = null; }
+  cw.loading = false;
+  if (!r || !r.ok) cw.messages.push({ role: 'error', text: (res && res.error) || 'Не удалось получить ответ.' });
+  else cw.messages.push({ role: 'bot', text: res.reply, task: res.task || null });
+  cwPaint();
+}
+async function cwSubmitTask(i) {
+  const m = cw.messages[i];
+  if (!m || !m.task || m.sent) return;
+  const chat = cw.messages.filter(x => x.role !== 'error').map(x => ({ role: x.role, text: x.text }));
+  const res = await fetchJson('/api/cowork/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: m.task.title, spec: m.task, chat }) });
+  if (!res) { showToast('Не удалось отправить задание'); return; }
+  m.sent = true;
+  cw.tasks = [res, ...(cw.tasks || [])];
+  cw.messages = []; cw.chatOpen = false;
+  state.coworkOpen = res.id;
+  showToast('Задание отправлено в работу');
+  render();
+}
+function cwCancel(id) {
+  openModal(`
+    <div class="modal">
+      <div class="modal-head"><h3>Отменить задание</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
+      <div class="modal-body"><p>Задание будет снято с очереди. Вернуть его нельзя, но можно создать новое.</p></div>
+      <div class="modal-foot">
+        <button class="btn secondary" onclick="closeModal()">Оставить</button>
+        <button class="btn" onclick="closeModal();cwCancelSend(${jsArg(id)})">Отменить задание</button>
+      </div>
+    </div>`);
+}
+async function cwCancelSend(id) {
+  const res = await fetchJson('/api/cowork/tasks/' + encodeURIComponent(id) + '/cancel', { method: 'POST' });
+  if (!res) { showToast('Не удалось отменить'); return; }
+  cw.tasks = cw.tasks.map(t => t.id === id ? res : t);
+  showToast('Задание отменено'); render();
+}
+// окно с одним полем — ссылка на изменение или причина отказа (правило: окна только через openModal)
+function cwAsk(title, label, value, multiline, cb) {
+  openModal(`
+    <div class="modal">
+      <div class="modal-head"><h3>${title}</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
+      <div class="modal-body"><div class="field"><label>${label}</label>${multiline
+        ? `<textarea id="cwAskVal" style="min-height:110px;">${escapeHtml(value || '')}</textarea>`
+        : `<input id="cwAskVal" type="text" value="${escapeHtml(value || '')}">`}</div></div>
+      <div class="modal-foot">
+        <button class="btn secondary" onclick="closeModal()">Отмена</button>
+        <button class="btn" id="cwAskOk">Сохранить</button>
+      </div>
+    </div>`);
+  document.getElementById('cwAskOk').onclick = () => {
+    const el = document.getElementById('cwAskVal'), v = el.value.trim();
+    if (!v) { el.focus(); el.classList.add('field-missing'); setTimeout(() => el.classList.remove('field-missing'), 1200); return; }   // без текста не отпускаем
+    closeModal(); cb(v);
+  };
+  document.getElementById('cwAskVal').focus();
+}
+function coworkLink(id) {
+  cwAsk('Ссылка на изменение', 'Ссылка на страницу изменения в репозитории', (cw.tasks.find(t => t.id === id) || {}).pr_url || '', false, async url => {
+    if (!url) return;
+    const res = await fetchJson('/api/cowork/tasks/' + encodeURIComponent(id) + '/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision: 'link', pr_url: url }) });
+    if (!res) { showToast('Не удалось сохранить'); return; }
+    cw.tasks = cw.tasks.map(t => t.id === id ? res : t); render();
+  });
+}
+async function cwDecideSend(id, decision, comment) {
+  const res = await fetchJson('/api/cowork/tasks/' + encodeURIComponent(id) + '/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision, comment }) });
+  if (!res) { showToast('Не удалось сохранить решение'); return; }
+  cw.tasks = cw.tasks.map(t => t.id === id ? res : t);
+  showToast(decision === 'accept' ? 'Изменение принято' : 'Изменение отклонено'); render();
+}
+function coworkDecide(id, decision) {
+  if (decision === 'reject') { cwAsk('Отклонить изменение', 'Причина отказа — автор её увидит', '', true, c => { if (c) cwDecideSend(id, 'reject', c); }); return; }
+  cwDecideSend(id, 'accept', '');
 }
 
 // ---------- приветственный баннер на главной ----------
@@ -3817,6 +4020,7 @@ async function openUserForm(id) {
       ${u ? '' : `
       <label class="field field-check"><input type="checkbox" id="uInvite" checked onchange="document.getElementById('uPassField').hidden=this.checked">
         <span>Выслать ссылку-приглашение — сотрудник сам придумает пароль</span></label>`}
+      <label class="field field-check"><input type="checkbox" id="uCowork" ${u && u.cowork ? 'checked' : ''}><span>Доступ к Connected Cowork</span></label>
       <div class="field" id="uPassField" ${u ? '' : 'hidden'}><label>${u ? 'Новый пароль (оставьте пустым, чтобы не менять)' : 'Пароль'}</label>
         <input id="uPass" type="password" autocomplete="new-password" placeholder="не короче 8 символов">
       </div>
@@ -3831,6 +4035,7 @@ async function saveUser(id) {
   const body = {
     name: document.getElementById('uName').value.trim(),
     role: document.getElementById('uRole').value,
+    cowork: document.getElementById('uCowork').checked,
   };
   const pass = document.getElementById('uPass').value;
   if (pass) body.password = pass;
@@ -4347,6 +4552,7 @@ function updateRequestsBadge() {
   document.querySelectorAll('.buyer-only').forEach(el => { el.hidden = !seesBuyer(); });
   document.querySelectorAll('.accountant-only').forEach(el => { el.hidden = !seesAccountant(); });
   document.querySelectorAll('.admin-only').forEach(el => { el.hidden = !isAdmin(); });
+  document.querySelectorAll('.cowork-only').forEach(el => { el.hidden = !canCowork(); });
   document.querySelectorAll('.side-badge').forEach(b => b.remove());
   const badge = (view, n, title) => {
     const el = document.querySelector(`.nav-item.side[data-view="${view}"]`);
@@ -8022,6 +8228,7 @@ const UI_RULES = [
   [/openEventForm\(|deleteItem\('events'/, () => isStaff()],   // календарь ведут HR и админ
   [/openValuesForm\(/, () => isStaff()],   // миссия и ценности правят HR и админ (07.10.2026)
   [/clearProfile\(|openHrFill\(/, () => isStaff()],     // очистить чужой профиль «О себе», заполнить карточку из карточки — HR и админ (07.10.2026)
+  [/coworkDecide\(|coworkLink\(/, () => isAdmin()],   // приёмка заданий Connected Cowork — только админ (08.10.2026)
   [/openPresentationForm\(|deleteItem\('documents'/, () => isStaff()],   // презентации и буклеты — HR и админ
   [/openProjectForm\(|openPartnerForm\(|openHonorForm\(|openFaqForm\(|openStepForm\(|submitStep\(|openLeaderForm\(|openAboutForm\(|openDocForm\(|deleteItem\('/, () => isAdmin()],
 ];

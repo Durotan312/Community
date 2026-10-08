@@ -81,7 +81,7 @@ def no_stale_cache(resp):
     return resp
 
 
-AUDIT_SKIP = {"/api/ask", "/api/logout"}   # вопросы боту и выход в журнал не пишем — это шум
+AUDIT_SKIP = {"/api/ask", "/api/logout", "/api/cowork/chat"}   # вопросы боту и выход в журнал не пишем — это шум
 
 
 CHECK_LOGINS = {"claude_check", "nobody_audit"}   # служебные учётки и логины технических проверок Claude
@@ -148,6 +148,20 @@ SCHEMA = {
         "must_set_password": "INTEGER NOT NULL DEFAULT 0",
         "created": "TEXT NOT NULL DEFAULT ''",
         "last_login": "TEXT",
+        "cowork": "INTEGER NOT NULL DEFAULT 0",   # допуск к Connected Cowork (08.10.2026): ставит админ; у admin всегда есть
+    },
+    "cowork_tasks": {                    # Connected Cowork (08.10.2026): задания агенту на изменение портала
+        "id": "TEXT PRIMARY KEY",
+        "author_id": "TEXT NOT NULL",
+        "author_name": "TEXT",
+        "title": "TEXT NOT NULL",
+        "spec": "TEXT",                  # JSON: section, what, who, check — готовое задание из чата с приёмщиком
+        "chat": "TEXT",                  # JSON: переписка с приёмщиком, из которой родилось задание
+        "status": "TEXT NOT NULL DEFAULT 'queued'",   # queued → running → review → accepted / rejected / failed / cancelled
+        "pr_url": "TEXT",                # ссылка на изменение (pull request в открытом репозитории)
+        "result": "TEXT",                # отчёт исполнителя или комментарий владельца
+        "created": "TEXT NOT NULL",
+        "updated": "TEXT NOT NULL",
     },
     "audit": {                           # журнал действий: кто, что и когда менял; входы и отказы
         "id": "TEXT PRIMARY KEY",
@@ -590,6 +604,7 @@ USER_WRITABLE_PREFIX = [
     ("DELETE", "/api/comments/", ""),        # удалить свой комментарий (чужой отсекает обработчик)
     ("PUT", "/api/attendance", ""),          # отметка в табеле: себе; чужую отсекает обработчик
     ("PUT", "/api/english", ""),             # отметка на английском: себе; чужую отсекает обработчик
+    ("POST", "/api/cowork/", ""),            # Connected Cowork: чат, задания — только допущенным, проверяет обработчик (08.10.2026)
     ("POST", "/api/games", ""),              # мини-игры: результат партии и отсчёт времени — только за себя
     ("PUT", "/api/tasks/", ""),              # задачи: править — автор; статус — исполнитель/автор; чужое отсекает обработчик
     ("POST", "/api/tasks/", "/status"),
@@ -649,7 +664,18 @@ def current_user():
 
 
 def user_json(u):
-    return {"id": u["id"], "login": u["login"], "name": u["name"] or u["login"], "role": u["role"]}
+    return {"id": u["id"], "login": u["login"], "name": u["name"] or u["login"], "role": u["role"],
+            "cowork": u["role"] == "admin" or bool(u["cowork"] if "cowork" in u.keys() else 0)}
+
+
+def _can_cowork(user):
+    """Connected Cowork открыт админу и тем, кому админ поставил допуск (08.10.2026, «только по допуску»)."""
+    if not user:
+        return False
+    if user["role"] == "admin":
+        return True
+    row = get_db().execute("SELECT cowork FROM users WHERE id=?", (user["id"],)).fetchone()
+    return bool(row and row["cowork"])
 
 
 def me_json(u):
@@ -660,6 +686,7 @@ def me_json(u):
     emp = _my_employee(get_db(), d)
     d["emp_id"] = emp["id"] if emp else None
     d["english"] = bool(emp and emp["english"])   # есть ли вкладка «Английский язык» в посещаемости
+    d["cowork"] = _can_cowork(u)                  # допуск к Connected Cowork — current_user() это поле не грузит
     return d
 
 
@@ -995,7 +1022,7 @@ def users():
     db = get_db()
     if request.method == "GET":
         rows = db.execute(
-            "SELECT id, login, name, role, email, must_set_password, created, last_login FROM users ORDER BY role, login"
+            "SELECT id, login, name, role, email, must_set_password, created, last_login, cowork FROM users ORDER BY role, login"
         ).fetchall()
         return jsonify([dict(r) for r in rows])
     data = request.get_json(silent=True) or {}
@@ -1017,9 +1044,10 @@ def users():
         return jsonify({"error": "Такой логин или почта уже есть."}), 400
     uid = uuid.uuid4().hex
     db.execute(
-        "INSERT INTO users (id, login, password_hash, name, role, email, created) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO users (id, login, password_hash, name, role, email, created, cowork) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (uid, login_, generate_password_hash(password) if not invite_mode else "!invited",
-         (data.get("name") or "").strip(), role, email, datetime.now().isoformat(timespec="seconds")),
+         (data.get("name") or "").strip(), role, email, datetime.now().isoformat(timespec="seconds"),
+         1 if data.get("cowork") in (1, True, "1", "true") else 0),   # допуск к Connected Cowork ставится и при создании
     )
     out = {"id": uid, "login": login_, "name": data.get("name") or "", "role": role, "email": email}
     if invite_mode:
@@ -1051,6 +1079,8 @@ def user_item(item_id):
         db.execute("UPDATE users SET role=? WHERE id=?", (role, item_id))
     if "email" in data:
         db.execute("UPDATE users SET email=? WHERE id=?", ((data.get("email") or "").strip().lower(), item_id))
+    if "cowork" in data:                                      # допуск к Connected Cowork — только админ (мы уже под /api/users)
+        db.execute("UPDATE users SET cowork=? WHERE id=?", (1 if data["cowork"] in (1, True, "1", "true") else 0, item_id))
     invite_url = None
     if data.get("reinvite"):
         invite_url = _invite_url(_new_invite(db, item_id))
@@ -2836,6 +2866,15 @@ def _services_state(db):
              ("Отчёт об опозданиях", "понедельник, 09:00 — вместо письма" if hrbot_ready() else "понедельник, 09:00 — письмом, пока HR не подключит Telegram"), ("Дни рождения", f"в сам день, {HRBOT_BDAY_HOUR:02d}:00"), ("Праздники", f"за {HRBOT_HOLIDAY_DAYS} дня, {HRBOT_BDAY_HOUR:02d}:00"),
              ("Последнее сообщение", _svc_when(m.get("ok_at"))),
              ("Последняя ошибка", f"{m.get('err')} ({_svc_when(m.get('err_at'))})" if m.get("err_at") else "")])
+    # Connected Cowork: приёмщик (тот же ключ AI), очередь заданий, исполнитель — этап 2
+    m = _svc_get("cowork")
+    q = {r[0]: r[1] for r in db.execute("SELECT status, COUNT(*) FROM cowork_tasks GROUP BY status")}
+    cw_state = "off" if not get_api_key() else ("bad" if _svc_failed(m) else "ok")
+    add("cowork", "Connected Cowork", cw_state, {"off": "нет ключа AI", "bad": "приёмщик не отвечает", "ok": "работает"}[cw_state],
+        [("В очереди", q.get("queued", 0)), ("Ждут приёмки", q.get("review", 0)), ("Принято", q.get("accepted", 0)),
+         ("Исполнитель", "не подключён — этап 2 (GitHub)"),
+         ("Последнее сообщение", _svc_when(m.get("ok_at"))),
+         ("Последняя ошибка", f"{m.get('err')} ({_svc_when(m.get('err_at'))})" if m.get("err_at") else "")])
     return out
 
 
@@ -6097,6 +6136,179 @@ def values_put(key):
     db.execute("INSERT INTO about (id, title, body) VALUES (?, '', ?) ON CONFLICT(id) DO UPDATE SET body=excluded.body", (key, body))
     db.commit()
     return jsonify(_values(db))
+
+
+# ---------- Connected Cowork (08.10.2026) ----------
+# Слова пользователя: «PM или аналитик пишут агенту „хочу поменять на портале то-то“, и через агента это всё делается»;
+# «пусть он будет внутри Community: создай в инструментах вкладку Connected Cowork». Его решения кнопками: доступ только по
+# допуску; исполнитель — Claude, позже, работает в GitHub отдельно от сайта; лимита заданий нет; переписка в базу знаний
+# Connect AI не попадает; ничего не уезжает на сайт без его кнопки «Принять». Этап 1 — приёмщик, очередь, приёмка;
+# этап 2 — исполнитель (docs/cowork.md).
+COWORK_PER_HOUR = 60
+COWORK_PROMPT = """Ты — приёмщик заданий в Connected Cowork, инструменте внутреннего портала компании Connected Home. \
+К тебе приходят менеджеры и аналитики, которые хотят что-то изменить на портале. Твоя работа — превратить просьбу в чёткое \
+задание для разработчика, не делая его самому.
+
+Разделы портала: Новости, Сотрудники (справочник, Community Road Map), Компания (Проекты, Партнёры, Руководство), \
+Новым сотрудникам, Программа лояльности, Миссия и ценности, Вакансии, Медиа (ивенты, видео), База знаний, \
+Connect AI (помощник), Календарь, Заявки (командировка, техника, отпуск, увольнение, компенсация и другие), Задачи, \
+Шаблоны документов, Посещаемость, Мой отпуск, Карта офиса, Кабинет руководителя, Предложения, Мини-игры, \
+HR-панель, Панель закупщика, Панель бухгалтера, Админ-панель, Личный кабинет.
+
+Как работать:
+- Отвечай по-русски, коротко, простым текстом без markdown и без звёздочек.
+- Если непонятно, задай не больше одного уточняющего вопроса за раз; всего уточнений — не больше трёх. \
+Выясни: в каком разделе, что именно должно измениться на экране, кто это увидит (все, HR, руководители…), как понять, что сделано.
+- Не проси личные данные людей (телефоны, паспорта, зарплаты) — заданию они не нужны.
+- Когда всё ясно, напиши одну фразу «Собрал задание, проверьте карточку» и в самой последней строке выведи ровно: \
+[[ЗАДАНИЕ]] {"title": "...", "section": "...", "what": "...", "who": "...", "check": "..."}
+где title — короткое название (до 60 знаков), section — раздел портала, what — что сделать (2–4 предложения), \
+who — кто увидит, check — как проверить. JSON в одну строку, без переносов."""
+
+_cowork_log = {}
+
+
+def _cowork_json(r):
+    d = dict(r)
+    for k in ("spec", "chat"):
+        try:
+            d[k] = json.loads(d[k] or "null")
+        except ValueError:
+            d[k] = None
+    return d
+
+
+@app.route("/api/cowork/chat", methods=["POST"])
+def cowork_chat():
+    """Чат с приёмщиком: уточняет просьбу и в конце отдаёт карточку задания; отправляет его в работу сам человек кнопкой."""
+    user = current_user()
+    if not _can_cowork(user):
+        return jsonify({"error": "Connected Cowork открыт только по допуску администратора."}), 403
+    now = time.time()
+    recent = [t for t in _cowork_log.get(user["id"], []) if now - t < 3600]
+    if len(recent) >= COWORK_PER_HOUR:
+        return jsonify({"error": "Слишком много сообщений за час. Продолжим чуть позже."}), 429
+    _cowork_log[user["id"]] = recent + [now]
+    data = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()[:2000]
+    if not message:
+        return jsonify({"error": "Сообщение пустое"}), 400
+    api_key = get_api_key()
+    if not api_key:
+        return jsonify({"error": "Приёмщик пока не настроен. Обратитесь к администратору портала."}), 503
+    contents = []
+    for m in (data.get("history") or [])[-20:]:
+        if isinstance(m, dict) and m.get("role") in ("user", "bot") and str(m.get("text") or "").strip():
+            contents.append({"role": "user" if m["role"] == "user" else "model", "parts": [{"text": str(m["text"])[:2000]}]})
+    contents.append({"role": "user", "parts": [{"text": message}]})
+    reply, last_err = "", None
+    for model in AI_MODELS:
+        ok, result = call_gemini(model, api_key, COWORK_PROMPT, contents)
+        if ok and str(result or "").strip():
+            reply = str(result).strip()
+            break
+        last_err = result
+    if not reply:
+        _svc_mark("cowork", False, last_err or "нет ответа")
+        return jsonify({"error": "Приёмщик не ответил. Попробуйте ещё раз через минуту."}), 502
+    task = None
+    m = re.search(r"\[\[ЗАДАНИЕ\]\]\s*`*(?:json)?\s*(\{.*\})", reply, re.S)
+    if m:
+        try:
+            raw = json.loads(m.group(1), strict=False)          # модель может вставить перенос строки внутри текста
+            task = {k: str(raw.get(k) or "").strip()[:1500] for k in ("title", "section", "what", "who", "check")}
+            task["title"] = task["title"][:80] or "Задание"
+        except ValueError:
+            task = None
+        reply = reply[:m.start()].strip()
+        if task is None:
+            reply = (reply + chr(10) + "Не получилось собрать карточку задания. Напишите ещё раз, что нужно сделать, одним сообщением.").strip()
+        elif not reply:
+            reply = "Собрал задание, проверьте карточку."
+    _svc_mark("cowork", True, "приёмщик ответил")
+    return jsonify({"reply": reply, "task": task})
+
+
+@app.route("/api/cowork/tasks", methods=["GET", "POST"])
+def cowork_tasks():
+    user = current_user()
+    if not _can_cowork(user):
+        return jsonify({"error": "Connected Cowork открыт только по допуску администратора."}), 403
+    db = get_db()
+    if request.method == "GET":
+        rows = db.execute("SELECT * FROM cowork_tasks ORDER BY created DESC LIMIT 200").fetchall()
+        out = []
+        for r in rows:
+            d = _cowork_json(r)
+            if r["author_id"] != user["id"] and user["role"] != "admin":
+                d["chat"] = None                              # переписку с приёмщиком видят только автор и админ (Security Engineer 08.10.2026)
+            out.append(d)
+        return jsonify(out)
+    data = request.get_json(silent=True) or {}
+    spec = data.get("spec") if isinstance(data.get("spec"), dict) else {}
+    spec = {k: str(spec.get(k) or "").strip()[:1500] for k in ("section", "what", "who", "check")}
+    title = (data.get("title") or "").strip()[:80]
+    if not title or not spec["what"]:
+        return jsonify({"error": "В задании нужны название и описание, что сделать."}), 400
+    chat = [m for m in (data.get("chat") or []) if isinstance(m, dict) and m.get("role") in ("user", "bot")][-40:]
+    chat = [{"role": m["role"], "text": str(m.get("text") or "")[:2000]} for m in chat]
+    now = datetime.now().isoformat(timespec="seconds")
+    item = {"id": uuid.uuid4().hex, "author_id": user["id"], "author_name": user["name"] or user["login"], "title": title,
+            "spec": json.dumps(spec, ensure_ascii=False), "chat": json.dumps(chat, ensure_ascii=False), "status": "queued",
+            "pr_url": "", "result": "", "created": now, "updated": now}
+    db.execute("INSERT INTO cowork_tasks (id, author_id, author_name, title, spec, chat, status, pr_url, result, created, updated) "
+               "VALUES (:id, :author_id, :author_name, :title, :spec, :chat, :status, :pr_url, :result, :created, :updated)", item)
+    db.commit()
+    return jsonify(_cowork_json(db.execute("SELECT * FROM cowork_tasks WHERE id=?", (item["id"],)).fetchone())), 201
+
+
+@app.route("/api/cowork/tasks/<item_id>/cancel", methods=["POST"])
+def cowork_cancel(item_id):
+    """Автор отзывает своё задание, пока его не взяли в работу; админ — любое."""
+    user = current_user()
+    if not _can_cowork(user):
+        return jsonify({"error": "Нет доступа."}), 403
+    db = get_db()
+    row = db.execute("SELECT * FROM cowork_tasks WHERE id=?", (item_id,)).fetchone()
+    if row is None or (row["author_id"] != user["id"] and user["role"] != "admin"):
+        return jsonify({"error": "Задание не найдено."}), 404
+    if row["status"] not in ("queued", "review", "failed"):
+        return jsonify({"error": "Это задание уже нельзя отменить."}), 400
+    db.execute("UPDATE cowork_tasks SET status='cancelled', updated=? WHERE id=?", (datetime.now().isoformat(timespec="seconds"), item_id))
+    db.commit()
+    return jsonify(_cowork_json(db.execute("SELECT * FROM cowork_tasks WHERE id=?", (item_id,)).fetchone()))
+
+
+@app.route("/api/cowork/tasks/<item_id>/decide", methods=["POST"])
+def cowork_decide(item_id):
+    """Владелец принимает или отклоняет изменение; этап 1 — только статус и ссылка, этап 2 — слияние на GitHub."""
+    user = current_user()
+    if not user or user["role"] != "admin":
+        return jsonify({"error": "Принимать изменения может только администратор."}), 403
+    db = get_db()
+    row = db.execute("SELECT * FROM cowork_tasks WHERE id=?", (item_id,)).fetchone()
+    if row is None:
+        return jsonify({"error": "Задание не найдено."}), 404
+    data = request.get_json(silent=True) or {}
+    decision = data.get("decision")
+    comment = (data.get("comment") or "").strip()[:2000]
+    pr_url = _clean_url(data.get("pr_url")) if data.get("pr_url") else row["pr_url"]
+    now = datetime.now().isoformat(timespec="seconds")
+    if decision == "link":                                     # этап 1: приложить ссылку на изменение и выставить на приёмку
+        if not pr_url:
+            return jsonify({"error": "Нужна ссылка на изменение (адрес pull request)."}), 400
+        if row["status"] not in ("queued", "running", "review"):
+            return jsonify({"error": "Это задание уже закрыто."}), 400
+        db.execute("UPDATE cowork_tasks SET pr_url=?, status='review', updated=? WHERE id=?", (pr_url or "", now, item_id))
+    elif decision in ("accept", "reject"):
+        if decision == "reject" and not comment:
+            return jsonify({"error": "Напишите причину отказа — автор её увидит."}), 400
+        db.execute("UPDATE cowork_tasks SET status=?, result=?, pr_url=?, updated=? WHERE id=?",
+                   ("accepted" if decision == "accept" else "rejected", comment, pr_url or "", now, item_id))
+    else:
+        return jsonify({"error": "Неизвестное решение."}), 400
+    db.commit()
+    return jsonify(_cowork_json(db.execute("SELECT * FROM cowork_tasks WHERE id=?", (item_id,)).fetchone()))
 
 
 # ---------- leaders (roadmap tab) ----------

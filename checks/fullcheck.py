@@ -184,6 +184,43 @@ if tmp:
 HR.put(f"/api/employees/{emp_card['id']}", json={"hired": ""})
 db.execute("DELETE FROM profiles WHERE employee_id=?", (emp_card["id"],)); db.commit()
 
+print("== Connected Cowork (08.10.2026)")
+emp_uid = db.execute("SELECT id FROM users WHERE login='chk_emp'").fetchone()[0]
+check(EMP.post("/api/cowork/chat", json={"message": "x"}).status_code == 403 and EMP.get("/api/cowork/tasks").status_code == 403, "без допуска Cowork закрыт")
+check(ADM.put(f"/api/users/{emp_uid}", json={"cowork": True}).status_code == 200 and EMP.get("/api/me").get_json().get("cowork") is True, "админ дал допуск — у сотрудника cowork=true")
+_real_gemini = app.call_gemini
+app.call_gemini = lambda model, key, system, contents: (True, 'Собрал задание, проверьте карточку.' + chr(10) + '[[ЗАДАНИЕ]] {"title": "Кнопка печати в заявках", "section": "Заявки", "what": "Добавить кнопку печати в окне заявки", "who": "все сотрудники", "check": "открыть заявку — кнопка на месте"}')
+_real_key = app.get_api_key
+app.get_api_key = lambda: _real_key() or "test-key"
+cwr = EMP.post("/api/cowork/chat", json={"message": "хочу кнопку печати", "history": []}).get_json()
+check(bool(cwr) and cwr.get("task", {}).get("title") == "Кнопка печати в заявках" and "[[ЗАДАНИЕ]]" not in (cwr.get("reply") or ""), "приёмщик отдал карточку задания, служебная строка срезана")
+app.call_gemini = lambda model, key, system, contents: (True, 'Собрал.' + chr(10) + '[[ЗАДАНИЕ]] {bad json, "x": }')
+cwb = EMP.post("/api/cowork/chat", json={"message": "ещё раз", "history": []})
+check(cwb.status_code == 200 and cwb.get_json().get("task") is None and "[[ЗАДАНИЕ]]" not in cwb.get_json().get("reply", "") and "Не получилось" in cwb.get_json().get("reply", ""), "кривой JSON от модели — понятный ответ, не ошибка сервера")
+app.call_gemini = _real_gemini; app.get_api_key = _real_key
+ct = ok(EMP.post("/api/cowork/tasks", json={"title": cwr["task"]["title"], "spec": cwr["task"], "chat": [{"role": "user", "text": "хочу кнопку печати"}]}), "задание отправлено в работу")
+check(bool(ct) and ct["status"] == "queued" and ct["spec"]["section"] == "Заявки", "задание в очереди с разобранной карточкой")
+check(EMP.post("/api/cowork/tasks", json={"title": "", "spec": {}}).status_code == 400, "пустое задание не принимается")
+check(BUY.get("/api/cowork/tasks").status_code == 403, "закупщик без допуска список не видит")
+check(ADM.get("/api/cowork/tasks").get_json()[0]["chat"] is not None, "админ видит переписку задания")
+adm_uid = db.execute("SELECT id FROM users WHERE login='chk_admin'").fetchone()[0]
+hr_uid = db.execute("SELECT id FROM users WHERE login='chk_hr'").fetchone()[0]
+ADM.put(f"/api/users/{hr_uid}", json={"cowork": True})
+check(HR.get("/api/cowork/tasks").get_json()[0]["chat"] is None and EMP.get("/api/cowork/tasks").get_json()[0]["chat"] is not None, "чужую переписку допущенный не видит, свою — видит")
+ADM.put(f"/api/users/{hr_uid}", json={"cowork": False})
+check(EMP.post(f"/api/cowork/tasks/{ct['id']}/decide", json={"decision": "accept"}).status_code == 403, "сотрудник не принимает изменения")
+check(ADM.post(f"/api/cowork/tasks/{ct['id']}/decide", json={"decision": "link", "pr_url": "javascript:alert(1)"}).status_code == 400, "ссылка не-адрес не принимается")
+check(ADM.post(f"/api/cowork/tasks/{ct['id']}/decide", json={"decision": "link", "pr_url": "https://github.com/Durotan312/Community/pull/1"}).get_json()["status"] == "review", "админ приложил ссылку — задание ждёт приёмки")
+check(ADM.post(f"/api/cowork/tasks/{ct['id']}/decide", json={"decision": "reject"}).status_code == 400, "отказ без причины не принимается")
+check(ADM.post(f"/api/cowork/tasks/{ct['id']}/decide", json={"decision": "accept"}).get_json()["status"] == "accepted", "админ принял изменение")
+ct2 = ok(EMP.post("/api/cowork/tasks", json={"title": "Второе", "spec": {"what": "x"}}), "второе задание")
+check(HEAD.post(f"/api/cowork/tasks/{ct2['id']}/cancel").status_code in (403, 404) and EMP.post(f"/api/cowork/tasks/{ct2['id']}/cancel").get_json()["status"] == "cancelled", "чужое задание не отменить, своё — можно")
+check(ADM.put(f"/api/users/{emp_uid}", json={"cowork": False}).status_code == 200 and EMP.get("/api/cowork/tasks").status_code == 403, "допуск снят — Cowork снова закрыт")
+with app.app.app_context():
+    kb = app.build_knowledge_base(db)
+check("Кнопка печати в заявках" not in kb, "задания Cowork в базу знаний бота не попадают")
+db.execute("DELETE FROM cowork_tasks"); db.commit()
+
 print("== Миссия и ценности (07.10.2026)")
 vals = EMP.get("/api/values").get_json()
 check(isinstance(vals, dict) and all(vals.get(k) for k in ("mission", "vision", "values")) and "Наша миссия" in vals["mission"], "сотрудник читает миссию, видение и ценности")

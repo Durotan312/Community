@@ -52,7 +52,7 @@ for m, p in rules:
     check(r.status_code == 401, f"аноним {m} {p} → {r.status_code}")
 
 print("== 2. Сотрудник — отказ на всём, кроме своих разрешённых действий")
-USER_OK = ("/api/ask", "/api/suggestions", "/api/requests", "/api/logout", "/api/me/password", "/api/games", "/api/attendance", "/api/english", "/api/resume-upload", "/api/receipt-upload", "/api/translate", "/api/tasks", "/api/login", "/api/register", "/api/invite/", "/api/me/profile")
+USER_OK = ("/api/ask", "/api/suggestions", "/api/requests", "/api/logout", "/api/me/password", "/api/games", "/api/attendance", "/api/english", "/api/resume-upload", "/api/receipt-upload", "/api/translate", "/api/tasks", "/api/login", "/api/register", "/api/invite/", "/api/me/profile", "/api/cowork/")
 for m, p in rules:
     allowed = any(p.startswith(a) for a in USER_OK) or (p.startswith("/api/news/") and p.endswith("/comments")) or p.startswith("/api/comments/")
     if allowed: continue

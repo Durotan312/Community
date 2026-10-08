@@ -3410,3 +3410,22 @@ html[data-theme="dark"] .mine-cell.open{background:#221F1C;}
 .tag{display:inline-block;padding:4px 10px;border-radius:999px;background:var(--orange-tint);color:var(--orange-dark);font-size:13px;font-weight:600;}
 .profile-about{padding:18px 0;border-top:1px solid var(--border);}
 .profile-about .emp-profile{margin-top:0;border-top:0;margin-bottom:12px;}
+
+/* Connected Cowork (08.10.2026) */
+.cw-chat{margin-bottom:18px;}
+.cw-list{display:flex;flex-direction:column;gap:10px;}
+.cw-status.queued{background:var(--orange-tint);color:var(--orange);}
+.cw-status.running{background:#EAF3FF;color:#1F5FA8;}
+.cw-status.review{background:var(--orange);color:#fff;}
+.cw-status.accepted{background:#E6F6EC;color:#1F7A43;}
+.cw-status.rejected,.cw-status.failed{background:rgba(196,67,43,.1);color:var(--danger);}
+.cw-status.cancelled{background:var(--bg-soft);color:var(--ink-soft);}
+html[data-theme="dark"] .cw-status.accepted{background:#173323;color:#8FD9A4;}
+html[data-theme="dark"] .cw-status.running{background:#17273A;color:#8FBFF0;}
+.cw-title{overflow-wrap:break-word;min-width:0;}
+.val-head .cw-status{flex-shrink:0;}
+@media (max-width:600px){.val-head{flex-wrap:wrap;}.val-head .cw-title{flex-basis:100%;}}
+.field-missing{outline:2px solid var(--orange);outline-offset:1px;}
+.cw-link{overflow-wrap:anywhere;word-break:break-all;}
+.cw-chat .bot-col .bubble.error{max-width:100%;}
+.cw-chat-static{max-height:420px;overflow:auto;padding:4px;}
