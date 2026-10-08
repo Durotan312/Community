@@ -49,6 +49,8 @@ PUBLIC = ("/api/login", "/api/register", "/api/invite/", "/api/logout")
 for m, p in rules:
     if p.startswith(PUBLIC): continue
     r = ANON.open(p, method=m, json={})
+    if p.startswith("/api/cowork/runner/"):                 # исполнитель WorkFlow: без секрета — 403 (08.10.2026)
+        check(r.status_code == 403, f"аноним {m} {p} → {r.status_code}"); continue
     check(r.status_code == 401, f"аноним {m} {p} → {r.status_code}")
 
 print("== 2. Сотрудник — отказ на всём, кроме своих разрешённых действий")

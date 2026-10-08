@@ -17,6 +17,9 @@ services:
       # Доступ к elpass (ELPASS_EMAIL, ELPASS_PASSWORD, необязательно ELPASS_URL) — турникет, опоздания
       - path: ${STAFF_DATA:-/opt/staff-data}/elpass.env
         required: false
+      # Исполнитель WorkFlow (08.10.2026): CW_RUNNER_TOKEN — общий секрет портала и контейнера community-runner
+      - path: ${STAFF_DATA:-/opt/staff-data}/cowork.env
+        required: false
     environment:
       - PORTAL_HTTPS=1
       - MEDIA_ACCEL=1            # видео отдаёт nginx напрямую (X-Accel-Redirect), приложение только проверяет вход
@@ -28,3 +31,28 @@ services:
       - ${STAFF_DATA:-/opt/staff-data}/uploads:/app/static/uploads
       - ${STAFF_DATA:-/opt/staff-data}/api_key.txt:/app/api_key.txt:ro
       - ${STAFF_BACKUPS:-/opt/staff-backups}:/app/backups
+
+  # Исполнитель Connected WorkFlow (этап 2, 08.10.2026): отдельный контейнер, базы портала не видит, ходит в портал
+  # по сети compose с секретом из cowork.env (CW_RUNNER_TOKEN, ANTHROPIC_API_KEY). Без файла cowork.env не стартует
+  # (нет секрета) — портал тогда показывает «исполнитель не подключён».
+  community-runner:
+    container_name: community-runner
+    build:
+      context: .
+      dockerfile: cowork/Dockerfile
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file:
+      - path: ${STAFF_DATA:-/opt/staff-data}/cowork.env
+        required: false
+    environment:
+      - PORTAL_URL=http://community-chome:5050
+    mem_limit: 4g            # код проекта и агент не должны съесть сервер (Security Engineer 08.10.2026)
+    pids_limit: 512
+    cpus: 4
+    depends_on:
+      - community-chome

@@ -81,7 +81,7 @@ def no_stale_cache(resp):
     return resp
 
 
-AUDIT_SKIP = {"/api/ask", "/api/logout", "/api/cowork/chat"}   # вопросы боту и выход в журнал не пишем — это шум
+AUDIT_SKIP = {"/api/ask", "/api/logout", "/api/cowork/chat", "/api/cowork/runner/heartbeat", "/api/cowork/runner/next"}   # вопросы боту, выход и опрос исполнителя в журнал не пишем — это шум
 
 
 CHECK_LOGINS = {"claude_check", "nobody_audit"}   # служебные учётки и логины технических проверок Claude
@@ -101,7 +101,7 @@ def audit_log(resp):
     """Журнал для админ-панели: все изменения данных, входы и отказы в доступе. Паролей и текстов не храним — только путь."""
     try:
         path = request.path
-        if not path.startswith("/api/") or path in AUDIT_SKIP:
+        if not path.startswith("/api/") or (path in AUDIT_SKIP and resp.status_code < 400):
             return resp
         changing = request.method in ("POST", "PUT", "DELETE")
         denied = resp.status_code in (401, 403) and path not in ("/api/me",)
@@ -164,6 +164,16 @@ SCHEMA = {
         "project": "TEXT NOT NULL DEFAULT 'community'",   # к какому продукту задание (08.10.2026): ключ из cowork_projects
         "created": "TEXT NOT NULL",
         "updated": "TEXT NOT NULL",
+        "branch": "TEXT NOT NULL DEFAULT ''",     # этап 2: ветка исполнителя wf/<id>
+        "mr_id": "TEXT NOT NULL DEFAULT ''",      # номер pull/merge request — для слияния по «Принять»
+        "log": "TEXT NOT NULL DEFAULT ''",        # журнал исполнителя: что сделал, что проверил
+        "model": "TEXT NOT NULL DEFAULT ''",      # какой моделью сделано
+        "tokens_in": "INTEGER NOT NULL DEFAULT 0",
+        "tokens_out": "INTEGER NOT NULL DEFAULT 0",
+        "cost": "REAL NOT NULL DEFAULT 0",        # расход в долларах по отчёту исполнителя
+        "started": "TEXT NOT NULL DEFAULT ''",
+        "finished": "TEXT NOT NULL DEFAULT ''",
+        "rework": "INTEGER NOT NULL DEFAULT 0",   # сколько раз отправляли на доработку
     },
     "cowork_projects": {                 # продукты компании, по которым агенты принимают задания (08.10.2026: «все наши проекты»)
         "key": "TEXT PRIMARY KEY",       # community, aiva, elpass, elpark, chapp, wallee
@@ -171,11 +181,16 @@ SCHEMA = {
         "short": "TEXT",                 # одной строкой: что это
         "body": "TEXT",                  # описание для агента: что за продукт, из чего состоит, что важно
         "owner": "TEXT",                 # кто отвечает (к кому идти с вопросом)
-        "repo": "TEXT",                  # репозиторий кода
+        "repo": "TEXT",                  # репозиторий кода (https://github.com/… или https://gitlab…/группа/проект)
         "stack": "TEXT",                 # на чём написано
         "status": "TEXT NOT NULL DEFAULT 'active'",   # active — агент подключён; soon — описан, задания копятся в очереди
         "sort": "INTEGER NOT NULL DEFAULT 0",
         "updated": "TEXT NOT NULL",
+        "branch": "TEXT NOT NULL DEFAULT ''",     # этап 2 (08.10.2026): основная ветка; пусто — main
+        "token": "TEXT NOT NULL DEFAULT ''",      # токен GitLab/GitHub с правом на ветки и merge request; наружу не отдаётся
+        "rules": "TEXT NOT NULL DEFAULT ''",      # правила для агента (как CLAUDE.md), подкладываются в рабочую копию на время задания
+        "checks": "TEXT NOT NULL DEFAULT ''",     # команда проверки после правки (например, python checks/run.py); пусто — не запускать
+        "model": "TEXT NOT NULL DEFAULT ''",      # модель исполнителя для проекта; пусто — общая из настроек
     },
     "cowork_accounts": {                 # учётки WorkFlow (08.10.2026): вход внутрь WorkFlow отдельным логином super…
         "login": "TEXT PRIMARY KEY",
@@ -663,7 +678,7 @@ app.secret_key = _secret
 
 # Пути, доступные без входа, и записи, разрешённые ролям (админу — всё).
 AUTH_FREE = {"/api/login", "/api/me", "/api/register"}
-AUTH_FREE_PREFIX = ("/api/invite/",)
+AUTH_FREE_PREFIX = ("/api/invite/", "/api/cowork/runner/")   # исполнитель WorkFlow ходит без сессии, со своим секретом (08.10.2026)
 USER_WRITABLE = {
     ("POST", "/api/ask"),
     ("POST", "/api/suggestions"),
@@ -701,7 +716,7 @@ HR_WRITABLE_PREFIX = ("/api/news", "/api/gallery", "/api/upload", "/api/comments
                       "/api/documents", "/api/upload-doc")   # презентации и буклеты — HR и админ (22.09.2026)
 IS_PROD = os.environ.get("PORTAL_HTTPS") == "1"
 PORTAL_URL = os.environ.get("PORTAL_URL", "https://community.connectedhome.kz").rstrip("/")
-TRUSTED_HOSTS = {PORTAL_URL.split("://", 1)[-1], "localhost", "127.0.0.1"}   # localhost — проверка здоровья контейнера
+TRUSTED_HOSTS = {PORTAL_URL.split("://", 1)[-1], "localhost", "127.0.0.1", "community-chome"}   # localhost — проверка здоровья контейнера; community-chome — исполнитель WorkFlow по сети compose (08.10.2026)
 INVITE_TTL_DAYS = 7
 ROLES = {"admin": "Администратор", "hr": "HR", "buyer": "Закупщик", "accountant": "Бухгалтер", "cfo": "Финансовый директор", "user": "Сотрудник"}
 # Финансовый директор (06.10.2026, слова пользователя: «функционал для CFO — просмотр панели закупщика и панели бухгалтерии,
@@ -832,9 +847,27 @@ def require_auth():
 _login_fails = {}
 
 
+_runner_ip_cache = {"ip": "", "at": 0.0}
+
+
+def _runner_ip():
+    """Адрес контейнера исполнителя в сети compose (раз в минуту по имени); пусто, если его нет."""
+    if time.time() - _runner_ip_cache["at"] > 60:
+        try:
+            _runner_ip_cache["ip"] = socket.gethostbyname("community-runner") if _cw_runner_token() else ""
+        except (socket.gaierror, OSError):
+            _runner_ip_cache["ip"] = ""
+        _runner_ip_cache["at"] = time.time()
+    return _runner_ip_cache["ip"]
+
+
 def _client_ip():
-    # nginx кладёт настоящий адрес клиента в X-Real-IP; X-Forwarded-For клиент может подделать
-    return request.headers.get("X-Real-IP") or request.remote_addr or "?"
+    # nginx кладёт настоящий адрес клиента в X-Real-IP; X-Forwarded-For клиент может подделать.
+    # Запросу из контейнера исполнителя заголовок не верим (Security Engineer 08.10.2026): его мог поставить код проекта.
+    ra = request.remote_addr or "?"
+    if ra and ra == _runner_ip():
+        return ra
+    return request.headers.get("X-Real-IP") or ra
 
 
 @app.route("/api/login", methods=["POST"])
@@ -2978,7 +3011,8 @@ def _services_state(db):
     cw_state = "off" if not get_api_key() else ("bad" if _svc_failed(m) else "ok")
     add("cowork", "Connected WorkFlow", cw_state, {"off": "нет ключа AI", "bad": "приёмщик не отвечает", "ok": "работает"}[cw_state],
         [("В очереди", q.get("queued", 0)), ("Ждут приёмки", q.get("review", 0)), ("Принято", q.get("accepted", 0)),
-         ("Исполнитель", "не подключён — этап 2 (GitHub)"), ("Замечаний", db.execute("SELECT COUNT(*) FROM cowork_notes").fetchone()[0]),
+         ("Исполнитель", ("работает" if _cw_runner_alive() else "не отвечает") if _cw_runner_token() else "не подключён — нет cowork.env"),
+         ("Расход за месяц", "%.2f $" % _cw_month_cost(db)), ("Замечаний", db.execute("SELECT COUNT(*) FROM cowork_notes").fetchone()[0]),
          ("Проектов", db.execute("SELECT COUNT(*) FROM cowork_projects").fetchone()[0]),
          ("Последнее сообщение", _svc_when(m.get("ok_at"))),
          ("Последняя ошибка", f"{m.get('err')} ({_svc_when(m.get('err_at'))})" if m.get("err_at") else "")])
@@ -6367,6 +6401,7 @@ def cowork_tasks():
             d = _cowork_json(r)
             if r["author_id"] != user["id"] and user["role"] != "admin":
                 d["chat"] = None                              # переписку с приёмщиком видят только автор и админ (Security Engineer 08.10.2026)
+                d["log"] = ""                                 # журнал исполнителя — тоже
             out.append(d)
         return jsonify(out)
     data = request.get_json(silent=True) or {}
@@ -6420,6 +6455,11 @@ def cowork_decide(item_id):
     comment = (data.get("comment") or "").strip()[:2000]
     pr_url = _clean_url(data.get("pr_url")) if data.get("pr_url") else row["pr_url"]
     now = datetime.now().isoformat(timespec="seconds")
+    if decision == "link" and "mr_id" in data:
+        mr_id = str(data.get("mr_id") or "")[:20]
+        if mr_id and not mr_id.isdigit():
+            return jsonify({"error": "Номер merge request — только цифры."}), 400
+        db.execute("UPDATE cowork_tasks SET mr_id=? WHERE id=?", (mr_id, item_id))
     if decision == "link":                                     # этап 1: приложить ссылку на изменение и выставить на приёмку
         if not pr_url:
             return jsonify({"error": "Нужна ссылка на изменение (адрес pull request)."}), 400
@@ -6429,8 +6469,20 @@ def cowork_decide(item_id):
     elif decision in ("accept", "reject"):
         if decision == "reject" and not comment:
             return jsonify({"error": "Напишите причину отказа — автор её увидит."}), 400
+        if decision == "accept":                               # этап 2: «Принять» = слить merge request токеном проекта
+            err = _cw_merge(db.execute("SELECT * FROM cowork_projects WHERE key=?", (row["project"],)).fetchone(), row)
+            if err:
+                return jsonify({"error": err}), 502
         db.execute("UPDATE cowork_tasks SET status=?, result=?, pr_url=?, updated=? WHERE id=?",
                    ("accepted" if decision == "accept" else "rejected", comment, pr_url or "", now, item_id))
+    elif decision == "rework":                                 # этап 2: вернуть исполнителю с замечанием, та же ветка
+        if not comment:
+            return jsonify({"error": "Напишите, что доработать — исполнитель это прочитает."}), 400
+        if row["status"] not in ("review", "failed"):
+            return jsonify({"error": "На доработку можно вернуть только задание на приёмке или неудавшееся."}), 400
+        db.execute("INSERT INTO cowork_notes (id, task_id, author_id, author_name, text, created) VALUES (?,?,?,?,?,?)",
+                   (uuid.uuid4().hex, item_id, user["id"], user["name"] or user["login"], "На доработку: " + comment, now))
+        db.execute("UPDATE cowork_tasks SET status='queued', result=?, rework=rework+1, finished='', updated=? WHERE id=?", (comment, now, item_id))
     else:
         return jsonify({"error": "Неизвестное решение."}), 400
     db.commit()
@@ -6577,13 +6629,21 @@ def _cowork_material_project(db, key):
 
 
 # Проекты (08.10.2026): список продуктов, по которым принимаются задания. Читают вошедшие в WorkFlow, ведёт админ.
-COWORK_PROJECT_FIELDS = ("name", "short", "body", "owner", "repo", "stack", "status")
+def _cw_repo_ok(url):
+    """Репозиторий: только https://<хост>/<владелец>/<имя>… — токен по голому http и на кривой адрес не уходит."""
+    u = urllib.parse.urlparse(url or "")
+    return u.scheme == "https" and bool(u.netloc) and len([x for x in u.path.strip("/").split("/") if x]) >= 2
+
+
+COWORK_PROJECT_FIELDS = ("name", "short", "body", "owner", "repo", "stack", "status", "branch", "token", "rules", "checks", "model")
 
 
 def _cowork_project_json(db, r):
     d = dict(r)
+    d["token_set"] = bool(d.pop("token", ""))              # сам токен наружу не отдаём
     d["tasks"] = db.execute("SELECT COUNT(*) FROM cowork_tasks WHERE project=? AND status NOT IN ('accepted','rejected','cancelled')", (r["key"],)).fetchone()[0]
     d["materials"] = db.execute("SELECT COUNT(*) FROM cowork_materials WHERE project=?", (r["key"],)).fetchone()[0]
+    d["ready"] = bool(d["status"] == "active" and d["repo"] and d["token_set"] and _cw_runner_alive())   # агент реально может взять задание
     return d
 
 
@@ -6592,10 +6652,223 @@ def _cowork_project_fields(data):
     for k in COWORK_PROJECT_FIELDS:
         if k in data:
             v = str(data.get(k) or "").strip()
-            out[k] = _clean_url(v) if k == "repo" else v[:200 if k in ("name", "short", "owner", "stack") else 8000]
+            if k == "repo":
+                v = _clean_url(v)
+                if v and not _cw_repo_ok(v):
+                    v = ""
+            elif k == "token":
+                if v == "" and data.get("token") is None:
+                    continue
+                v = re.sub(r"[^\x21-\x7e]", "", v)[:300]     # токен: только печатные латинские знаки
+            elif k == "branch":
+                v = re.sub(r"[^A-Za-z0-9._/-]", "", v).lstrip("-.").replace("..", "")[:100]
+            elif k == "model":
+                v = v if v in CW_MODELS else ""
+            else:
+                v = v[:200 if k in ("name", "short", "owner", "stack", "checks") else 8000]
+            out[k] = v
     if "status" in out and out["status"] not in ("active", "soon"):
         out["status"] = "soon"
     return out
+
+
+# Исполнитель (этап 2, 08.10.2026, выбор пользователя кнопками: «на нашем сервере»; «сделай всё как у них, но лучше»).
+# Отдельный контейнер community-runner (cowork/runner.py) без доступа к базе: ходит в портал по этим адресам с общим
+# секретом CW_RUNNER_TOKEN (файл /opt/staff-data/cowork.env, там же ANTHROPIC_API_KEY). Берёт задание, делает рабочую копию,
+# запускает Claude Code с правилами проекта, прогоняет проверки, ищет секреты в правке, пушит ветку wf/<id>, открывает
+# merge request и отчитывается. «Принять» сливает merge request через API GitHub/GitLab токеном проекта.
+CW_MODELS = {"claude-sonnet-5-5": "Sonnet — быстрая, для обычных правок", "claude-opus-5-5": "Opus — сильнее, для крупных заданий",
+             "claude-haiku-5-5": "Haiku — самая дешёвая, для надписей и мелочей"}
+CW_DEFAULTS = {"model": "claude-sonnet-5-5", "budget_usd": 0, "max_turns": 40}
+# Ограничители: исполнитель не публикует правку, если в добавленных строках есть похожее на секрет (как политики у образца)
+CW_GUARDRAILS = [
+    ("приватный ключ", r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"),
+    ("токен GitHub", r"\bgh[pousr]_[A-Za-z0-9]{30,}\b|\bgithub_pat_[A-Za-z0-9_]{40,}\b"),
+    ("токен GitLab", r"\bglpat-[A-Za-z0-9_-]{20,}\b"),
+    ("ключ Anthropic", r"\bsk-ant-[A-Za-z0-9_-]{30,}\b"),
+    ("ключ OpenAI", r"\bsk-[A-Za-z0-9]{40,}\b"),
+    ("ключ AWS", r"\bAKIA[0-9A-Z]{16}\b"),
+    ("токен Telegram-бота", r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b"),
+    ("ключ Google", r"\bAIza[0-9A-Za-z_-]{35}\b"),
+    ("пароль в коде", r"(?i)\b(?:password|passwd|secret)\s*[:=]\s*['\"][^'\"]{6,}['\"]"),
+]
+
+
+def _cw_settings():
+    try:
+        raw = json.loads(_setting("cw_settings") or "{}")
+    except ValueError:
+        raw = {}
+    out = dict(CW_DEFAULTS)
+    out.update({k: raw[k] for k in CW_DEFAULTS if k in raw})
+    if out["model"] not in CW_MODELS:
+        out["model"] = CW_DEFAULTS["model"]
+    return out
+
+
+def _cw_runner():
+    try:
+        return json.loads(_setting("cw_runner") or "{}")
+    except ValueError:
+        return {}
+
+
+def _cw_runner_alive():
+    r = _cw_runner()
+    try:
+        return bool(r.get("seen")) and time.time() - float(r.get("seen_ts") or 0) < 180
+    except (TypeError, ValueError):
+        return False
+
+
+def _cw_month_cost(db):
+    month = datetime.now().strftime("%Y-%m")
+    return float(db.execute("SELECT COALESCE(SUM(cost), 0) FROM cowork_tasks WHERE finished LIKE ?", (month + "%",)).fetchone()[0] or 0)
+
+
+def _cw_runner_token():
+    return (os.environ.get("CW_RUNNER_TOKEN") or "").strip()
+
+
+_cw_runner_fails = {}
+
+
+def _cw_runner_auth():
+    """Исполнитель представляется общим секретом в заголовке; без секрета в окружении портала исполнитель выключен.
+    Подбор: 10 неверных секретов с адреса за 15 минут — дальше отказ без сравнения, отказы пишутся в журнал."""
+    tok = _cw_runner_token()
+    got = (request.headers.get("X-Runner-Token") or "").strip()
+    ip = _client_ip()
+    now = time.time()
+    fails = [t for t in _cw_runner_fails.get(ip, []) if now - t < 900]
+    if len(fails) >= 10:
+        _cw_runner_fails[ip] = fails
+        return False
+    ok = bool(tok) and len(got) == len(tok) and secrets.compare_digest(got, tok)
+    if not ok:
+        _cw_runner_fails[ip] = fails + [now]
+    return ok
+
+
+@app.route("/api/cowork/runner/heartbeat", methods=["POST"])
+def cowork_runner_heartbeat():
+    if not _cw_runner_auth():
+        return jsonify({"error": "нет доступа"}), 403
+    data = request.get_json(silent=True) or {}
+    _set_setting("cw_runner", json.dumps({"seen": datetime.now().isoformat(timespec="seconds"), "seen_ts": time.time(),
+                                          "version": str(data.get("version") or "")[:40], "has_key": bool(data.get("has_key")),
+                                          "claude": str(data.get("claude") or "")[:60]}, ensure_ascii=False))
+    st = _cw_settings()
+    return jsonify({"model": st["model"], "max_turns": st["max_turns"], "guardrails": [[n, rx] for n, rx in CW_GUARDRAILS]})
+
+
+@app.route("/api/cowork/runner/next", methods=["POST"])
+def cowork_runner_next():
+    """Выдать исполнителю следующее задание: самое старое в очереди по проекту с репозиторием и токеном, в рамках бюджета."""
+    if not _cw_runner_auth():
+        return jsonify({"error": "нет доступа"}), 403
+    db = get_db()
+    st = _cw_settings()
+    if st["budget_usd"] and _cw_month_cost(db) >= float(st["budget_usd"]):
+        return jsonify({"task": None, "reason": "бюджет месяца исчерпан"})
+    row = db.execute("SELECT t.* FROM cowork_tasks t JOIN cowork_projects p ON p.key=t.project WHERE t.status='queued' "
+                     "AND p.status='active' AND p.repo<>'' AND p.token<>'' ORDER BY t.created LIMIT 1").fetchone()
+    if row is None:
+        return jsonify({"task": None})
+    pr = db.execute("SELECT * FROM cowork_projects WHERE key=?", (row["project"],)).fetchone()
+    now = datetime.now().isoformat(timespec="seconds")
+    branch = row["branch"] or ("wf/" + row["id"][:12])
+    db.execute("UPDATE cowork_tasks SET status='running', started=?, updated=?, branch=? WHERE id=?", (now, now, branch, row["id"]))
+    db.commit()
+    task = _cowork_json(row)
+    notes = [dict(n) for n in db.execute("SELECT author_name, text, created FROM cowork_notes WHERE task_id=? ORDER BY created", (row["id"],))]
+    materials = [dict(m) for m in db.execute("SELECT title, body, url FROM cowork_materials WHERE project=? OR project='' ORDER BY updated DESC LIMIT 20", (pr["key"],))]
+    return jsonify({"task": {"id": task["id"], "title": task["title"], "spec": task["spec"], "branch": branch, "rework": row["rework"],
+                             "result": row["result"], "notes": notes},
+                    "project": {"key": pr["key"], "name": pr["name"], "body": pr["body"], "repo": pr["repo"], "branch": pr["branch"] or "main",
+                                "token": pr["token"], "rules": pr["rules"], "checks": pr["checks"], "stack": pr["stack"],
+                                "model": pr["model"] or st["model"], "materials": materials},
+                    "max_turns": st["max_turns"], "guardrails": [[n, rx] for n, rx in CW_GUARDRAILS]})
+
+
+@app.route("/api/cowork/runner/report/<item_id>", methods=["POST"])
+def cowork_runner_report(item_id):
+    """Отчёт исполнителя: review — merge request открыт; failed — не вышло (причина в log/result)."""
+    if not _cw_runner_auth():
+        return jsonify({"error": "нет доступа"}), 403
+    db = get_db()
+    row = db.execute("SELECT * FROM cowork_tasks WHERE id=?", (item_id,)).fetchone()
+    if row is None:
+        return jsonify({"error": "Задание не найдено."}), 404
+    if row["status"] not in ("running", "queued"):
+        return jsonify({"error": "Задание уже закрыто."}), 400
+    data = request.get_json(silent=True) or {}
+    status = "review" if data.get("status") == "review" else "failed"
+    usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+    def num(v, cast=int, hi=10 ** 9):
+        try:
+            return min(hi, max(cast(0), cast(v or 0)))         # расход и токены — не меньше нуля и не больше разумного (Security Engineer 08.10.2026)
+        except (TypeError, ValueError):
+            return cast(0)
+    mr_id = str(data.get("mr_id") or "")[:20]
+    if mr_id and not mr_id.isdigit():
+        return jsonify({"error": "Номер merge request — только цифры."}), 400
+    now = datetime.now().isoformat(timespec="seconds")
+    db.execute("UPDATE cowork_tasks SET status=?, pr_url=?, mr_id=?, log=?, result=?, model=?, tokens_in=tokens_in+?, tokens_out=tokens_out+?, "
+               "cost=cost+?, finished=?, updated=? WHERE id=?",
+               (status, _clean_url(str(data.get("pr_url") or "")) or row["pr_url"], mr_id or row["mr_id"],
+                str(data.get("log") or "")[:60000], str(data.get("summary") or "")[:4000], str(data.get("model") or "")[:60],
+                num(usage.get("tokens_in")), num(usage.get("tokens_out")), num(usage.get("cost"), float, 500.0), now, now, item_id))
+    db.commit()
+    _svc_mark("cowork", status == "review", "задание выполнено" if status == "review" else str(data.get("summary") or "не удалось")[:200])
+    return jsonify({"ok": True})
+
+
+# --- слияние merge request по «Принять» (GitHub и GitLab) ---
+def _cw_git_api(repo, token, method, path, body=None, host_api=None):
+    """Запрос к API GitHub или GitLab по адресу репозитория. Возвращает (код, json)."""
+    u = urllib.parse.urlparse(repo)
+    parts = [x for x in u.path.strip("/").removesuffix(".git").split("/") if x]
+    if u.netloc == "github.com":
+        url = "https://api.github.com/repos/%s/%s%s" % (parts[0], parts[1], path)
+        headers = {"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json"}
+    else:                                                   # GitLab (gitlab.com или свой)
+        proj = urllib.parse.quote("/".join(parts), safe="")
+        url = "%s://%s/api/v4/projects/%s%s" % (u.scheme, u.netloc, proj, path)
+        headers = {"PRIVATE-TOKEN": token}
+    headers["User-Agent"] = "connected-workflow"
+    data = json.dumps(body).encode() if body is not None else None
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.status, json.loads(r.read().decode() or "null")
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read().decode() or "null")
+        except ValueError:
+            return e.code, None
+    except (urllib.error.URLError, socket.timeout, ValueError) as e:
+        return 0, {"message": str(e)}
+
+
+def _cw_merge(pr, task):
+    """Слить merge request задания токеном проекта. Возвращает текст ошибки или ''."""
+    if not (pr and pr["repo"] and pr["token"] and task["mr_id"]):
+        return ""                                            # нечего сливать (ссылку приложили руками) — просто принимаем
+    if not str(task["mr_id"]).isdigit() or not _cw_repo_ok(pr["repo"]):
+        return "Номер merge request или адрес репозитория не в порядке."
+    if urllib.parse.urlparse(pr["repo"]).netloc == "github.com":
+        code, j = _cw_git_api(pr["repo"], pr["token"], "PUT", "/pulls/%s/merge" % task["mr_id"],
+                              {"merge_method": "squash", "commit_title": task["title"][:72]})
+    else:
+        code, j = _cw_git_api(pr["repo"], pr["token"], "PUT", "/merge_requests/%s/merge" % task["mr_id"],
+                              {"squash": True, "should_remove_source_branch": True})
+    if code in (200, 201):
+        return ""
+    msg = (j or {}).get("message") if isinstance(j, dict) else None
+    return "Не удалось слить изменение (%s): %s" % (code or "нет связи", msg or "ответ без объяснения")
 
 
 @app.route("/api/cowork/projects", methods=["GET", "POST"])
@@ -6641,9 +6914,12 @@ def cowork_project(key):
         db.execute("UPDATE cowork_materials SET project='' WHERE project=?", (key,))
         db.commit()
         return jsonify({"deleted": key})
-    f = _cowork_project_fields(request.get_json(silent=True) or {})
+    data = request.get_json(silent=True) or {}
+    f = _cowork_project_fields(data)
     if "name" in f and not f["name"]:
         return jsonify({"error": "Нужно название."}), 400
+    if str(data.get("repo") or "").strip() and not f.get("repo"):
+        return jsonify({"error": "Адрес репозитория — только https://хост/владелец/проект."}), 400
     if f:
         sets = ", ".join(f"{k}=?" for k in f)
         db.execute(f"UPDATE cowork_projects SET {sets}, updated=? WHERE key=?", (*f.values(), datetime.now().isoformat(timespec="seconds"), key))
@@ -6705,8 +6981,35 @@ def cowork_settings():
         return jsonify({"error": "Настройки видит только администратор."}), 403
     db = get_db()
     q = {r[0]: r[1] for r in db.execute("SELECT status, COUNT(*) FROM cowork_tasks GROUP BY status")}
-    return jsonify({"ai_key": bool(get_api_key()), "repo": "https://github.com/Durotan312/Community", "executor": None,
+    rn = _cw_runner()
+    st = _cw_settings()
+    return jsonify({"ai_key": bool(get_api_key()), "repo": "https://github.com/Durotan312/Community",
+                    "executor": {"configured": bool(_cw_runner_token()), "alive": _cw_runner_alive(), "seen": rn.get("seen") or "",
+                                 "has_key": bool(rn.get("has_key")), "version": rn.get("version") or "", "claude": rn.get("claude") or ""},
+                    "settings": st, "models": CW_MODELS, "month_cost": round(_cw_month_cost(db), 2),
+                    "month_tasks": db.execute("SELECT COUNT(*) FROM cowork_tasks WHERE finished LIKE ?", (datetime.now().strftime("%Y-%m") + "%",)).fetchone()[0],
+                    "guardrails": [n for n, _ in CW_GUARDRAILS],
                     "queue": q, "accounts": [dict(r) for r in db.execute("SELECT login, name, must_change, created, last_login FROM cowork_accounts ORDER BY login")]})
+
+
+@app.route("/api/cowork/settings", methods=["PUT"])
+def cowork_settings_save():
+    """Админ задаёт модель по умолчанию, бюджет на месяц (0 — без лимита) и предел ходов исполнителя."""
+    user = current_user()
+    if not user or user["role"] != "admin":
+        return jsonify({"error": "Настройки меняет только администратор."}), 403
+    data = request.get_json(silent=True) or {}
+    st = _cw_settings()
+    if data.get("model") in CW_MODELS:
+        st["model"] = data["model"]
+    for k, lo, hi in (("budget_usd", 0, 100000), ("max_turns", 5, 200)):
+        if k in data:
+            try:
+                st[k] = min(hi, max(lo, float(data[k]) if k == "budget_usd" else int(data[k])))
+            except (TypeError, ValueError):
+                return jsonify({"error": "Число не разобрано."}), 400
+    _set_setting("cw_settings", json.dumps(st))
+    return jsonify(st)
 
 
 # ---------- leaders (roadmap tab) ----------

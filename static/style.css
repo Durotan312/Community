@@ -3554,3 +3554,11 @@ body.cw-mode .main{max-width:none;}
 .cw-proj-short{font-weight:600;margin-bottom:8px;}
 .cw-proj-actions{display:flex;justify-content:flex-end;margin-bottom:14px;}
 @media (max-width:720px){.cw-proj-grid{grid-template-columns:1fr;}}
+
+/* WorkFlow — исполнитель (08.10.2026): журнал, индикатор работы */
+.cw-log{margin:10px 0;}
+.cw-log summary{cursor:pointer;font-weight:600;color:var(--orange-dark);}
+.cw-log pre{white-space:pre-wrap;word-break:break-word;background:var(--bg-soft);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:12.5px;max-height:360px;overflow:auto;margin-top:8px;}
+.cw-running{display:flex;align-items:center;gap:8px;}
+.cw-running .ask-dots{display:inline-flex;gap:3px;}
+.emp-profile-row code{background:var(--bg-soft);border-radius:6px;padding:1px 6px;font-size:12.5px;}
