@@ -701,7 +701,15 @@ def _can_cowork(user):
         return False
     if user["role"] == "admin":
         return True
-    return bool(session.get("cw"))        # вход в WorkFlow отдельной учёткой (08.10.2026: «в воркфлоу провалится — там спросят данные»)
+    cw = session.get("cw")                # вход в WorkFlow отдельной учёткой (08.10.2026: «в воркфлоу провалится — там спросят данные»)
+    if not cw:
+        return False
+    # учётку удалили или сменили пароль на другом устройстве — вход снимается (нашёл Security Engineer 08.10.2026)
+    row = get_db().execute("SELECT password_hash FROM cowork_accounts WHERE login=?", (cw,)).fetchone()
+    if not row or session.get("cw_pv") != _pw_stamp(row["password_hash"]):
+        session.pop("cw", None); session.pop("cw_must_change", None); session.pop("cw_pv", None)
+        return False
+    return True
 
 
 def me_json(u):
@@ -6359,6 +6367,7 @@ def cowork_decide(item_id):
 # я ему даю логин supermisha, а пароль сам придумай, это тестово, потом поменяет, либо сразу страницу смены пароля сделай».
 # Учётки WorkFlow (таблица cowork_accounts) заводит админ, логин начинается с «super». После входа — session["cw"].
 _cw_login_fails = {}
+_CW_DUMMY_HASH = generate_password_hash("dummy-" + secrets.token_hex(8))
 
 
 @app.route("/api/cowork/login", methods=["POST"])
@@ -6367,16 +6376,22 @@ def cowork_login():
     data = request.get_json(silent=True) or {}
     login_ = str(data.get("login") or "").strip().lower()
     password = str(data.get("password") or "")
+    now_t = time.time()
     fails, until = _cw_login_fails.get(user["id"], (0, 0))
-    if fails >= 10 and time.time() < until:
+    afails, auntil = _cw_login_fails.get("acc:" + login_, (0, 0))      # и по логину WorkFlow — перебор с разных учёток портала
+    if (fails >= 10 and now_t < until) or (afails >= 10 and now_t < auntil):
         return jsonify({"error": "Слишком много неверных попыток. Подождите 15 минут."}), 429
     db = get_db()
     row = db.execute("SELECT * FROM cowork_accounts WHERE login=?", (login_,)).fetchone()
-    if not row or not check_password_hash(row["password_hash"], password):
-        _cw_login_fails[user["id"]] = ((fails + 1) if time.time() < until else 1, time.time() + 900)
+    # несуществующий логин проверяем против заглушки — чтобы по времени ответа не угадать, какие учётки есть
+    good = check_password_hash(row["password_hash"] if row else _CW_DUMMY_HASH, password) and row is not None
+    if not good:
+        _cw_login_fails[user["id"]] = ((fails + 1) if now_t < until else 1, now_t + 900)
+        _cw_login_fails["acc:" + login_] = ((afails + 1) if now_t < auntil else 1, now_t + 900)
         return jsonify({"error": "Неверный логин или пароль WorkFlow."}), 401
-    _cw_login_fails.pop(user["id"], None)
+    _cw_login_fails.pop(user["id"], None); _cw_login_fails.pop("acc:" + login_, None)
     session["cw"] = login_
+    session["cw_pv"] = _pw_stamp(row["password_hash"])
     session["cw_must_change"] = bool(row["must_change"])
     db.execute("UPDATE cowork_accounts SET last_login=?, last_user_id=? WHERE login=?", (datetime.now().isoformat(timespec="seconds"), user["id"], login_))
     db.commit()
@@ -6385,7 +6400,7 @@ def cowork_login():
 
 @app.route("/api/cowork/logout", methods=["POST"])
 def cowork_logout():
-    session.pop("cw", None); session.pop("cw_must_change", None)
+    session.pop("cw", None); session.pop("cw_must_change", None); session.pop("cw_pv", None)
     return jsonify({"ok": True})
 
 
@@ -6403,9 +6418,11 @@ def cowork_password():
         return jsonify({"error": "Старый пароль неверный."}), 400
     if len(new) < 8:
         return jsonify({"error": "Новый пароль должен быть не короче 8 символов."}), 400
-    db.execute("UPDATE cowork_accounts SET password_hash=?, must_change=0 WHERE login=?", (generate_password_hash(new), login_))
+    new_hash = generate_password_hash(new)
+    db.execute("UPDATE cowork_accounts SET password_hash=?, must_change=0 WHERE login=?", (new_hash, login_))
     db.commit()
     session["cw_must_change"] = False
+    session["cw_pv"] = _pw_stamp(new_hash)      # на этом устройстве остаёмся, другие выкинет
     return jsonify({"ok": True})
 
 

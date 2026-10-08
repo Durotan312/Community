@@ -225,7 +225,10 @@ check(bool(mt) and mt["url"] == "" and EMP.get("/api/cowork/materials").get_json
 ok(ADM.put(f"/api/cowork/materials/{mt['id']}", json={"title": "Правила заявок 2"}), "материал изменён"); ok(ADM.delete(f"/api/cowork/materials/{mt['id']}"), "материал удалён")
 check(EMP.get("/api/cowork/settings").status_code == 403 and ADM.get("/api/cowork/settings").get_json().get("repo", "").startswith("https://github.com/"), "настройки WorkFlow видит только админ")
 check(EMP.post("/api/cowork/logout").status_code == 200 and EMP.get("/api/cowork/tasks").status_code == 403, "вышел из WorkFlow — адреса снова закрыты")
+EMP.post("/api/cowork/login", json={"login": "supertest", "password": "NewPassw0rd!"})
+check(EMP.get("/api/cowork/tasks").status_code == 200, "вошёл снова с новым паролем")
 ok(ADM.delete("/api/cowork/accounts/supertest"), "учётка WorkFlow удалена")
+check(EMP.get("/api/cowork/tasks").status_code == 403 and EMP.get("/api/me").get_json().get("cw_login") == "", "удалили учётку — вошедшего выкинуло сразу")
 with app.app.app_context():
     kb = app.build_knowledge_base(db)
 check("Кнопка печати в заявках" not in kb, "задания WorkFlow в базу знаний бота не попадают")
