@@ -149,6 +149,7 @@ SCHEMA = {
         "created": "TEXT NOT NULL DEFAULT ''",
         "last_login": "TEXT",
         "cowork": "INTEGER NOT NULL DEFAULT 0",   # допуск к Connected WorkFlow (08.10.2026): ставит админ; у admin всегда есть
+        "cowork_only": "INTEGER NOT NULL DEFAULT 0",   # отдельная учётка только для WorkFlow (08.10.2026): портал ей закрыт
     },
     "cowork_tasks": {                    # Connected WorkFlow (08.10.2026): задания агенту на изменение портала
         "id": "TEXT PRIMARY KEY",
@@ -668,20 +669,21 @@ def current_user():
     if not uid:
         return None
     if "user" not in g:
-        row = get_db().execute("SELECT id, login, name, role, password_hash FROM users WHERE id=?", (uid,)).fetchone()
+        row = get_db().execute("SELECT id, login, name, role, password_hash, cowork, cowork_only FROM users WHERE id=?", (uid,)).fetchone()
         g.user = None
         if row:
             stamp = _pw_stamp(row["password_hash"])
             if "pv" not in session:
                 session["pv"] = stamp            # вход до появления отпечатка — дописываем молча
             if session["pv"] == stamp:
-                g.user = {k: row[k] for k in ("id", "login", "name", "role")}
+                g.user = {k: row[k] for k in ("id", "login", "name", "role", "cowork", "cowork_only")}
     return g.user
 
 
 def user_json(u):
     return {"id": u["id"], "login": u["login"], "name": u["name"] or u["login"], "role": u["role"],
-            "cowork": u["role"] == "admin" or bool(u["cowork"] if "cowork" in u.keys() else 0)}
+            "cowork": u["role"] == "admin" or bool(u["cowork"] if "cowork" in u.keys() else 0),
+            "cowork_only": bool(u["cowork_only"] if "cowork_only" in u.keys() else 0)}
 
 
 def _can_cowork(user):
@@ -690,8 +692,8 @@ def _can_cowork(user):
         return False
     if user["role"] == "admin":
         return True
-    row = get_db().execute("SELECT cowork FROM users WHERE id=?", (user["id"],)).fetchone()
-    return bool(row and row["cowork"])
+    row = get_db().execute("SELECT cowork, cowork_only FROM users WHERE id=?", (user["id"],)).fetchone()
+    return bool(row and (row["cowork"] or row["cowork_only"]))
 
 
 def me_json(u):
@@ -740,6 +742,8 @@ def require_auth():
     user = current_user()
     if not user:
         return jsonify({"error": "Нужно войти в портал.", "auth": "login"}), 401
+    if "cowork_only" in user.keys() and user["cowork_only"] and not path.startswith(("/api/me", "/api/cowork/", "/api/logout", "/api/translate")):
+        return jsonify({"error": "Эта учётная запись открывает только Connected WorkFlow."}), 403   # отдельный вход (08.10.2026)
     if request.method in ("POST", "PUT", "DELETE") and not can_write(user, request.method, path):
         return jsonify({"error": "У вашей учётной записи нет прав на это действие."}), 403
     if path.startswith("/api/admin/") and user["role"] != "admin":
@@ -1038,7 +1042,7 @@ def users():
     db = get_db()
     if request.method == "GET":
         rows = db.execute(
-            "SELECT id, login, name, role, email, must_set_password, created, last_login, cowork FROM users ORDER BY role, login"
+            "SELECT id, login, name, role, email, must_set_password, created, last_login, cowork, cowork_only FROM users ORDER BY role, login"
         ).fetchall()
         return jsonify([dict(r) for r in rows])
     data = request.get_json(silent=True) or {}
@@ -1049,6 +1053,8 @@ def users():
     invite_mode = bool(data.get("invite"))
     if not login_ and email:
         login_ = email
+    if data.get("cowork_only") in (1, True, "1", "true") and not login_.startswith("super"):
+        return jsonify({"error": "Логин учётки WorkFlow должен начинаться с «super», например supermisha."}), 400   # правило пользователя 08.10.2026
     if not re.fullmatch(r"[a-z0-9._@-]{3,64}", login_):
         return jsonify({"error": "Логин: латиница, цифры, точка, дефис, подчёркивание или корпоративная почта."}), 400
     if email and not re.fullmatch(r"[a-z0-9._-]+@[a-z0-9.-]+\.[a-z]{2,}", email):
@@ -1060,10 +1066,11 @@ def users():
         return jsonify({"error": "Такой логин или почта уже есть."}), 400
     uid = uuid.uuid4().hex
     db.execute(
-        "INSERT INTO users (id, login, password_hash, name, role, email, created, cowork) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO users (id, login, password_hash, name, role, email, created, cowork, cowork_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (uid, login_, generate_password_hash(password) if not invite_mode else "!invited",
          (data.get("name") or "").strip(), role, email, datetime.now().isoformat(timespec="seconds"),
-         1 if data.get("cowork") in (1, True, "1", "true") else 0),   # допуск к Connected WorkFlow ставится и при создании
+         1 if data.get("cowork") in (1, True, "1", "true") or data.get("cowork_only") in (1, True, "1", "true") else 0,   # допуск ставится и при создании
+         1 if data.get("cowork_only") in (1, True, "1", "true") else 0),
     )
     out = {"id": uid, "login": login_, "name": data.get("name") or "", "role": role, "email": email}
     if invite_mode:
@@ -1097,6 +1104,9 @@ def user_item(item_id):
         db.execute("UPDATE users SET email=? WHERE id=?", ((data.get("email") or "").strip().lower(), item_id))
     if "cowork" in data:                                      # допуск к Connected WorkFlow — только админ (мы уже под /api/users)
         db.execute("UPDATE users SET cowork=? WHERE id=?", (1 if data["cowork"] in (1, True, "1", "true") else 0, item_id))
+    if "cowork_only" in data:                                 # учётка только для WorkFlow
+        only = 1 if data["cowork_only"] in (1, True, "1", "true") else 0
+        db.execute("UPDATE users SET cowork_only=?, cowork=CASE WHEN ? THEN 1 ELSE cowork END WHERE id=?", (only, only, item_id))
     invite_url = None
     if data.get("reinvite"):
         invite_url = _invite_url(_new_invite(db, item_id))
@@ -1115,6 +1125,13 @@ def user_item(item_id):
 
 
 # ---------- pages ----------
+@app.route("/workflow")
+def workflow_entry():
+    """Отдельный вход в Connected WorkFlow (08.10.2026): та же страница, фронт по адресу показывает свой экран входа
+    и после входа открывает только WorkFlow."""
+    return index()
+
+
 @app.route("/")
 def index():
     # Версия статики = время последнего изменения файлов: браузер не подсунет старый кэш

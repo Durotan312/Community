@@ -390,6 +390,7 @@ function syncNavActive() {
 window.addEventListener('popstate', () => { if (!state.user) return; applyHash(); closeModal(); render(); window.scrollTo(0, 0); });
 
 function render() {
+  if (state.user && (state.user.cowork_only || isWorkflowEntry()) && state.view !== 'cowork' && canCowork()) state.view = 'cowork';   // отдельный вход — только WorkFlow
   if (state.view !== 'office') state.officeSearch = '';   // поиск по карте офиса живёт только внутри раздела
   if (state.view !== 'games' && typeof gamesLeave === 'function') { gamesLeave(); state.game = null; }
   if (state.user) { updateRequestsBadge(); syncUrl(); }   // пункт «HR-панель» и счётчик — по роли; адрес — по разделу
@@ -1170,7 +1171,8 @@ async function renderCowork(main) {
         <div class="cw-group">Планирование</div>
         ${CW_NAV.map(([k, name, icon]) => navItem(k, name, icon)).join('')}
         ${isAdmin() ? `<div class="cw-group">Управление</div>${navItem('settings', 'Настройки', 'settings')}` : ''}
-        <a class="cw-nav cw-exit" href="#home" onclick="goToView('home');return false;">${ico('home')}<span>На портал</span></a>
+        ${u.cowork_only || isWorkflowEntry() ? `<a class="cw-nav cw-exit" href="#" onclick="doLogout();return false;">${ico('home')}<span>Выйти</span></a>`
+          : `<a class="cw-nav cw-exit" href="#home" onclick="goToView('home');return false;">${ico('home')}<span>На портал</span></a>`}
         <div class="cw-user">
           <div class="org-ava" style="--h:${hueOf(u.name || '')}">${initials(u.name || '')}</div>
           <div class="cw-user-text"><b>${escapeHtml(u.name || '')}</b><small>${escapeHtml(u.email || u.login || '')}</small></div>
@@ -3834,6 +3836,8 @@ function openLoyalty(key) {
 // =========================================================
 // ВХОД В ПОРТАЛ
 // =========================================================
+// отдельный вход в WorkFlow: адрес /workflow (08.10.2026) или учётка «только WorkFlow»
+function isWorkflowEntry() { return location.pathname.replace(/\/+$/, '') === '/workflow'; }
 function showLogin(msg) {
   document.getElementById('modalOverlay')?.remove();
   document.querySelector('.login-screen')?.remove();
@@ -3849,13 +3853,18 @@ function showLogin(msg) {
           <div class="login-word">Connected<br>Community</div>
         </div>
         <div class="login-aside-mid">
-          <div class="login-claim">Внутренний портал<br>компании Connected&nbsp;Home</div>
+          ${isWorkflowEntry() ? `<div class="login-claim">Connected WorkFlow<br>рабочее пространство для заданий с AI-агентами</div>
+          <ul class="login-points">
+            <li>Опишите, что изменить на портале, — агент уточнит и соберёт задание</li>
+            <li>Задания, замечания и материалы в одном месте</li>
+            <li>Изменения попадают на сайт только после подтверждения владельца</li>
+          </ul>` : `<div class="login-claim">Внутренний портал<br>компании Connected&nbsp;Home</div>
           <ul class="login-points">
             <li>Справочник сотрудников и структура компании</li>
             <li>Новости, события и жизнь компании</li>
             <li>Документы, заявки и ответы на частые вопросы</li>
             <li>AI&nbsp;Community&nbsp;Bot — ответит по данным портала</li>
-          </ul>
+          </ul>`}
         </div>
         <div class="login-aside-foot">Астана · с 2018 года</div>
       </aside>
@@ -3867,7 +3876,7 @@ function showLogin(msg) {
         </div>
 
         <div class="login-head">
-          <h1 class="login-title">Вход в портал</h1>
+          <h1 class="login-title">${isWorkflowEntry() ? 'Вход в WorkFlow' : 'Вход в портал'}</h1>
           <p class="login-sub">Войдите под своей рабочей учётной записью</p>
         </div>
 
@@ -4106,6 +4115,7 @@ async function submitLogin(e) {
     hideLogin();
     await loadAll();
     applyHash();
+    if (isWorkflowEntry() || (state.user && state.user.cowork_only)) state.view = 'cowork';
     state._urlReplace = true;
     render();
     showToast(`Добро пожаловать, ${data.name}!`);
@@ -4233,6 +4243,7 @@ async function openUserForm(id) {
       <label class="field field-check"><input type="checkbox" id="uInvite" checked onchange="document.getElementById('uPassField').hidden=this.checked">
         <span>Выслать ссылку-приглашение — сотрудник сам придумает пароль</span></label>`}
       <label class="field field-check"><input type="checkbox" id="uCowork" ${u && u.cowork ? 'checked' : ''}><span>Доступ к Connected WorkFlow</span></label>
+      <label class="field field-check"><input type="checkbox" id="uCoworkOnly" ${u && u.cowork_only ? 'checked' : ''}><span>Только WorkFlow — вход по адресу /workflow, портал закрыт</span></label>
       <div class="field" id="uPassField" ${u ? '' : 'hidden'}><label>${u ? 'Новый пароль (оставьте пустым, чтобы не менять)' : 'Пароль'}</label>
         <input id="uPass" type="password" autocomplete="new-password" placeholder="не короче 8 символов">
       </div>
@@ -4248,6 +4259,7 @@ async function saveUser(id) {
     name: document.getElementById('uName').value.trim(),
     role: document.getElementById('uRole').value,
     cowork: document.getElementById('uCowork').checked,
+    cowork_only: document.getElementById('uCoworkOnly').checked,
   };
   const pass = document.getElementById('uPass').value;
   if (pass) body.password = pass;
