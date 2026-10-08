@@ -13,6 +13,7 @@ const state = {
 // ico('calendar') → инлайн-SVG, размер = font-size родителя, цвет = currentColor.
 // =========================================================
 const ICONS = {
+  arrowLeft: '<path d="M19 12H5M12 19l-7-7 7-7"/>',
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
   download: '<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/>',
   receipt: '<path d="M5 3h14v18l-2.5-1.7L14 21l-2-1.7L10 21l-2.5-1.7L5 21z"/><path d="M9 8h6M9 12h6"/>',
@@ -1127,9 +1128,12 @@ const cw = { messages: [], draft: '', loading: false, tasks: null, materials: nu
 // проекты (08.10.2026, слова пользователя: «правки будут делать не только для Community — все наши проекты»): выбранный
 // проект запоминается в браузере; описание проекта уходит приёмщику вместе с просьбой
 function cwProjects() { return cw.projects || []; }
-function cwProject(key) { return cwProjects().find(p => p.key === (key || cw.project)) || cwProjects()[0] || null; }
+function cwProject(key) { return cwProjects().find(p => p.key === (key || cw.project)) || null; }
 function cwProjectName(key) { const p = cwProject(key); return p ? p.name : ''; }
-function cwSetProject(key) { cw.project = key; try { localStorage.setItem('cw_project', key); } catch (e) { /* приватный режим */ } render(); }
+function cwSetProject(key) { if (cw.project !== key) { cw.messages = []; cw.draft = ''; } cw.project = key; try { localStorage.setItem('cw_project', key); } catch (e) { /* приватный режим */ } }
+// провалиться в проект: адрес #cowork/<ключ>.<вкладка>
+function cwEnter(key, tab) { cwSetProject(key); state.coworkTab = key + '.' + (tab || 'chat'); render(); }
+function cwGo(tab) { state.coworkTab = cw.project ? cw.project + '.' + tab : tab; render(); }
 function cwProjectChip(key) { const p = cwProject(key); return p ? `<span class="cw-proj-chip">${escapeHtml(p.name)}</span>` : ''; }
 const CW_STATUS = { queued: ['В очереди', 'queued'], running: ['В работе', 'running'], review: ['Ждёт приёмки', 'review'],
   accepted: ['Принято', 'accepted'], rejected: ['Отклонено', 'rejected'], failed: ['Не удалось', 'failed'], cancelled: ['Отменено', 'cancelled'] };
@@ -1138,7 +1142,7 @@ function cwLoggedIn() { return !!(state.user && (state.user.role === 'admin' || 
 function cwStatus(t) { const s = CW_STATUS[t.status] || [t.status, '']; return `<span class="req-status cw-status ${s[1]}">${s[0]}</span>`; }
 
 const CW_TABS = [['chat', 'Чат-агент'], ['tasks', 'Мои задания'], ['notes', 'Замечания'], ['materials', 'Материалы'], ['settings', 'Настройки']];
-const CW_NAV = [['chat', 'Чат-агент', 'chat'], ['tasks', 'Мои задания', 'check'], ['projects', 'Проекты', 'layers'], ['notes', 'Замечания', 'edit'], ['materials', 'Материалы', 'book']];
+const CW_NAV = [['chat', 'Чат-агент', 'chat'], ['tasks', 'Задания', 'check'], ['notes', 'Замечания', 'edit'], ['materials', 'Материалы', 'book']];
 const CW_SET = [['ai', 'AI-провайдеры', 'Модели и учётки агентов'], ['services', 'Рабочие сервисы', 'Трекеры и базы знаний'], ['git', 'Доступ к Git', 'Репозитории и ключи'],
   ['notify', 'Уведомления', 'Telegram и отчёты'], ['dialogs', 'Мои диалоги', 'Разбор общения с агентом'], ['security', 'Безопасность', 'Защита, ключи и журнал']];
 async function renderCowork(main) {
@@ -1149,20 +1153,27 @@ async function renderCowork(main) {
     const [fresh, projects] = await Promise.all([fetchJson('/api/cowork/tasks'), fetchJson('/api/cowork/projects')]);
     if (fresh) { cw.tasks = fresh; cw.loadedAt = Date.now(); } else cw.tasks = cw.tasks || [];
     if (projects) cw.projects = projects;
-    if (!cw.project) { try { cw.project = localStorage.getItem('cw_project') || ''; } catch (e) { /* приватный режим */ } }
-    if (!cwProject(cw.project)) cw.project = (cwProjects()[0] || {}).key || 'community';
     if (state.view !== 'cowork') return;
   }
-  let tab = state.coworkTab || 'chat';
-  let openId = null;
+  // адрес: projects | settings | <ключ проекта>.<chat|tasks|notes|materials|task-<id>>; старые #cowork/chat и #cowork/task-<id> — в последний проект
+  let raw = state.coworkTab || 'projects', tab = raw, openId = null;
+  if (raw.includes('.')) { const [pk, t] = raw.split('.', 2); if (cwProject(pk)) { cwSetProject(pk); tab = t || 'chat'; } else tab = 'projects'; }
+  else if (raw !== 'projects' && raw !== 'settings') {
+    let pk = cw.project; try { pk = pk || localStorage.getItem('cw_project') || ''; } catch (e) { /* приватный режим */ }
+    const t = cw.tasks.find(x => x.id === raw || 'task-' + x.id === raw);
+    if (t) pk = t.project;
+    if (cwProject(pk)) { cwSetProject(pk); tab = t ? 'task-' + t.id : raw; } else tab = 'projects';
+  }
   if (tab.startsWith('task-')) { openId = tab.slice(5); tab = 'tasks'; }
-  else if (cw.tasks.some(t => t.id === tab)) { openId = tab; tab = 'tasks'; }   // старый адрес #cowork/<id>
-  const known = CW_NAV.some(x => x[0] === tab) || tab === 'settings';
-  if (!known || (tab === 'settings' && !isAdmin())) { tab = 'chat'; state.coworkTab = 'chat'; }
-  const u = state.user || {};
-  const navItem = (k, name, icon) => `<a class="cw-nav${k === tab ? ' active' : ''}" href="#" onclick="state.coworkTab=${jsArg(k)};render();return false;">${ico(icon)}<span>${name}</span>${k === 'tasks' && isAdmin() ? cwReviewCount() : ''}</a>`;
-  const titles = { chat: 'Чат-агент', tasks: openId ? 'Задание' : 'Мои задания', projects: 'Проекты', notes: 'Замечания', materials: 'Материалы', settings: 'Настройки' };
-  const crumbs = (tab === 'settings' ? 'Управление' : 'Планирование') + ' · ' + titles[tab];
+  const inProject = tab !== 'projects' && tab !== 'settings' && !!cwProject();
+  if (tab === 'settings' && !isAdmin()) tab = 'projects';
+  if (!inProject && tab !== 'settings') tab = 'projects';
+  if (inProject && !CW_NAV.some(x => x[0] === tab)) tab = 'chat';
+  state.coworkTab = tab === 'projects' || tab === 'settings' ? tab : cw.project + '.' + (openId ? 'task-' + openId : tab);
+  const u = state.user || {}, pr = inProject ? cwProject() : null;
+  const navItem = (k, name, icon, go) => `<a class="cw-nav${k === tab ? ' active' : ''}" href="#" onclick="${go};return false;">${ico(icon)}<span>${name}</span>${k === 'tasks' && isAdmin() ? cwReviewCount() : ''}</a>`;
+  const titles = { chat: 'Чат-агент', tasks: openId ? 'Задание' : 'Задания', projects: 'Проекты', notes: 'Замечания', materials: 'Материалы', settings: 'Настройки' };
+  const crumbs = (tab === 'settings' ? 'Управление' : pr ? pr.name : 'Проекты') + (pr || tab === 'settings' ? ' · ' + titles[tab] : '');
   let body = '';
   if (openId) {
     const t = cw.tasks.find(x => x.id === openId);
@@ -1177,9 +1188,12 @@ async function renderCowork(main) {
     <div class="cw-shell">
       <aside class="cw-side">
         <div class="cw-brand"><span class="cw-brand-mark">W</span><div><b>Connected WorkFlow</b><small>рабочая среда</small></div></div>
+        ${pr ? `<a class="cw-nav cw-nav-back" href="#" onclick="state.coworkTab='projects';render();return false;">${ico('arrowLeft')}<span>Все проекты</span></a>
+        <div class="cw-proj-head"><div class="cw-proj-mark">${ico('layers')}</div><div class="cw-user-text"><b>${escapeHtml(pr.name)}</b><small>${escapeHtml(pr.short || '')}</small></div></div>
         <div class="cw-group">Планирование</div>
-        ${CW_NAV.map(([k, name, icon]) => navItem(k, name, icon)).join('')}
-        ${isAdmin() ? `<div class="cw-group">Управление</div>${navItem('settings', 'Настройки', 'settings')}` : ''}
+        ${CW_NAV.map(([k, name, icon]) => navItem(k, name, icon, `cwGo(${jsArg(k)})`)).join('')}`
+        : `<div class="cw-group">Планирование</div>${navItem('projects', 'Проекты', 'layers', "state.coworkTab='projects';render()")}`}
+        ${isAdmin() ? `<div class="cw-group">Управление</div>${navItem('settings', 'Настройки', 'settings', "state.coworkTab='settings';render()")}` : ''}
         ${u.cw_login ? `<a class="cw-nav" href="#" onclick="cwLogout();return false;">${ico('lock')}<span>Выйти из WorkFlow</span></a>` : ''}
         <a class="cw-nav cw-exit" href="#home" onclick="goToView('home');return false;">${ico('home')}<span>На портал</span></a>
         <div class="cw-user">
@@ -1191,7 +1205,7 @@ async function renderCowork(main) {
         <div class="cw-top">
           <div>
             <div class="cw-crumbs">${escapeHtml(crumbs)} · ${fmtShortDate(new Date().toISOString())}</div>
-            <h1 class="cw-h1">${titles[tab]}</h1>
+            <h1 class="cw-h1">${pr && !openId && tab === 'chat' ? escapeHtml(pr.name) : titles[tab]}</h1>
           </div>
           <button class="btn secondary cw-onb-btn" onclick="cwOnboarding(0)">${ico('bulb')} Первичная настройка</button>
         </div>
@@ -1205,43 +1219,34 @@ async function renderCowork(main) {
   else if (tab === 'settings') cwRenderSettings();
   if (!cwOnbDone()) { try { localStorage.setItem('cw_onboarding', 'done'); } catch (e) { /* приватный режим */ } cwOnboarding(0, true); }
 }
-function cwReviewCount() { const n = (cw.tasks || []).filter(t => t.status === 'review').length; return n ? ` <span class="subtab-count">${n}</span>` : ''; }
-function cwOpenTask(id) { state.coworkTab = 'task-' + id; render(); }
+function cwReviewCount() { const n = (cw.tasks || []).filter(t => t.status === 'review' && t.project === cw.project).length; return n ? ` <span class="subtab-count">${n}</span>` : ''; }
+function cwOpenTask(id) { const t = (cw.tasks || []).find(x => x.id === id); if (t && t.project !== cw.project && cwProject(t.project)) cwSetProject(t.project); state.coworkTab = cw.project + '.task-' + id; render(); }
 
 function coworkListHtml() {
-  const list = (cw.tasks || []).filter(t => !cw.taskFilter || t.project === cw.taskFilter);
+  const list = (cw.tasks || []).filter(t => t.project === cw.project);
   const rows = list.map(t => `
     <div class="req-row" onclick="cwOpenTask(${jsArg(t.id)})">
       <div class="req-row-mark">${ico('activity')}</div>
       <div class="req-row-main">
         <div class="req-row-title">${escapeHtml(t.title)}</div>
-        <div class="req-row-sub">${cwProjectChip(t.project)} ${escapeHtml(t.author_name || '')} · ${fmtShortDate(t.created)}${t.spec && t.spec.section ? ' · ' + escapeHtml(t.spec.section) : ''}</div>
+        <div class="req-row-sub">${escapeHtml(t.author_name || '')} · ${fmtShortDate(t.created)}${t.spec && t.spec.section ? ' · ' + escapeHtml(t.spec.section) : ''}</div>
       </div>
       ${cwStatus(t)}
     </div>`).join('');
-  const filter = cwProjects().length > 1 ? `<div class="cw-proj-bar">
-      <button class="cw-proj${cw.taskFilter ? '' : ' active'}" onclick="cw.taskFilter='';render()">Все проекты</button>
-      ${cwProjects().map(p => `<button class="cw-proj${cw.taskFilter === p.key ? ' active' : ''}" onclick="cw.taskFilter=${jsArg(p.key)};render()">${escapeHtml(p.name)}</button>`).join('')}
-    </div>` : '';
-  return `${filter}<div class="cw-list no-tr">${rows || '<div class="empty"><strong>Заданий пока нет</strong></div>'}</div>`;
+  return `<div class="cw-list no-tr">${rows || '<div class="empty"><strong>Заданий пока нет</strong></div>'}</div>`;
 }
 
 // страница «Проекты»: карточки продуктов с описанием для агента; правит админ
 function cwProjectsHtml() {
   const cards = cwProjects().map(p => `
-    <div class="val-block cw-proj-card no-tr">
+    <div class="val-block cw-proj-card no-tr" onclick="cwEnter(${jsArg(p.key)})">
       <div class="val-head"><div class="val-mark">${ico('layers')}</div><h3 class="cw-title">${escapeHtml(p.name)}</h3>
-        <span class="req-status ${p.status === 'active' ? 'done' : 'cancelled'}">${p.status === 'active' ? 'агент подключён' : 'агент не подключён'}</span>
-        ${isAdmin() ? `<button class="btn text" onclick="cwOpenProjectForm(${jsArg(p.key)})">Изменить</button>` : ''}</div>
+        <span class="req-status ${p.status === 'active' ? 'done' : 'cancelled'}">${p.status === 'active' ? 'агент подключён' : 'агент не подключён'}</span></div>
       ${p.short ? `<div class="cw-proj-short">${escapeHtml(p.short)}</div>` : ''}
-      ${p.body ? `<div class="emp-profile-text">${escapeHtml(p.body)}</div>` : ''}
       ${p.owner ? `<div class="emp-profile-row"><span>Отвечает</span><div>${escapeHtml(p.owner)}</div></div>` : ''}
-      ${p.stack ? `<div class="emp-profile-row"><span>На чём написан</span><div>${escapeHtml(p.stack)}</div></div>` : ''}
-      ${p.repo ? `<div class="emp-profile-row"><span>Код</span><div><a class="cw-link" href="${escapeHtml(p.repo)}" target="_blank" rel="noopener">${escapeHtml(p.repo)}</a></div></div>` : ''}
-      <div class="profile-actions">
-        <button class="btn" onclick="cwSetProject(${jsArg(p.key)});state.coworkTab='chat';render()">Поставить задание</button>
-        <button class="btn secondary" onclick="cw.taskFilter=${jsArg(p.key)};state.coworkTab='tasks';render()">Задания${p.tasks ? ' · ' + p.tasks : ''}</button>
-      </div>
+      <div class="cw-proj-foot"><span>${p.tasks ? 'В работе: ' + p.tasks : 'Заданий нет'}</span>
+        ${isAdmin() ? `<button class="btn text" onclick="event.stopPropagation();cwOpenProjectForm(${jsArg(p.key)})">Изменить</button>` : ''}
+        <button class="btn" onclick="event.stopPropagation();cwEnter(${jsArg(p.key)})">Открыть</button></div>
     </div>`).join('');
   return `${isAdmin() ? `<div class="cw-proj-actions"><button class="btn secondary" onclick="cwOpenProjectForm('')">Добавить проект</button></div>` : ''}
     <div class="cw-proj-grid">${cards || '<div class="empty"><strong>Проектов пока нет</strong></div>'}</div>`;
@@ -1292,11 +1297,11 @@ function coworkTaskHtml(t) {
   const mine = state.user && t.author_id === state.user.id;
   const row = (k, v) => v ? `<div class="emp-profile-row"><span>${k}</span><div class="emp-profile-text">${escapeHtml(v)}</div></div>` : '';
   return `
-    <div class="cw-back"><button class="btn text" onclick="state.coworkTab='tasks';render()">← К заданиям</button></div>
+    <div class="cw-back"><button class="btn text" onclick="cwGo('tasks')">← К заданиям</button></div>
     <div class="val-block no-tr">
       <div class="val-head"><div class="val-mark">${ico('activity')}</div><h3 class="cw-title">${escapeHtml(t.title)}</h3>${cwStatus(t)}</div>
       <div class="emp-profile-row"><span>Автор</span><div>${escapeHtml(t.author_name || '')} · ${fmtDate(t.created)}</div></div>
-      ${row('Проект', cwProjectName(t.project))}${row('Раздел', sp.section)}${row('Что сделать', sp.what)}${row('Кто увидит', sp.who)}${row('Как проверить', sp.check)}
+      ${row('Раздел', sp.section)}${row('Что сделать', sp.what)}${row('Кто увидит', sp.who)}${row('Как проверить', sp.check)}
       ${t.pr_url ? `<div class="emp-profile-row"><span>Изменение</span><div><a class="cw-link" href="${escapeHtml(t.pr_url)}" target="_blank" rel="noopener">${escapeHtml(t.pr_url)}</a></div></div>` : ''}
       ${t.result ? row(t.status === 'rejected' ? 'Причина отказа' : 'Итог', t.result) : ''}
       <div class="profile-actions">
@@ -1338,14 +1343,14 @@ async function cwAddNote(taskId) {
 async function cwRenderNotesAll() {
   const box = document.getElementById('cwNotesAll');
   if (!box) return;
-  const notes = (await fetchJson('/api/cowork/notes')) || [];
+  const notes = ((await fetchJson('/api/cowork/notes')) || []).filter(n => n.project === cw.project);
   box.className = 'cw-notes no-tr';
   box.innerHTML = notes.length ? notes.map(n => cwNoteHtml(n, true)).join('') : '<div class="empty"><strong>Замечаний пока нет</strong></div>';
 }
 async function cwRenderMaterials() {
   const box = document.getElementById('cwMaterials');
   if (!box) return;
-  const items = (await fetchJson('/api/cowork/materials')) || [];
+  const items = ((await fetchJson('/api/cowork/materials')) || []).filter(m => !m.project || m.project === cw.project);
   box.className = 'no-tr';
   box.innerHTML = `
     <div class="val-block">
@@ -1356,14 +1361,14 @@ async function cwRenderMaterials() {
     ${items.map(m => `
     <div class="val-block">
       <div class="val-head"><div class="val-mark">${ico('file')}</div><h3 class="cw-title">${escapeHtml(m.title)}</h3><button class="btn text" onclick="openCwMaterialForm(${jsArg(m.id)})">Изменить</button></div>
-      ${m.project ? `<div class="emp-profile-row"><span>Проект</span><div>${escapeHtml(cwProjectName(m.project))}</div></div>` : ''}
+      ${!m.project ? `<div class="emp-profile-row"><span>Проект</span><div>Общий — для всех проектов</div></div>` : ''}
       ${m.body ? `<div class="emp-profile-text">${escapeHtml(m.body)}</div>` : ''}
       ${m.url ? `<div class="emp-profile-row"><span>Ссылка</span><div><a class="cw-link" href="${escapeHtml(m.url)}" target="_blank" rel="noopener">${escapeHtml(m.url)}</a></div></div>` : ''}
     </div>`).join('') || '<div class="empty"><strong>Материалов пока нет</strong></div>'}`;
   cw.materials = items;
 }
 function openCwMaterialForm(id) {
-  const m = (cw.materials || []).find(x => x.id === id) || { title: '', body: '', url: '', project: '' };
+  const m = (cw.materials || []).find(x => x.id === id) || { title: '', body: '', url: '', project: cw.project };
   openModal(`
     <div class="modal">
       <div class="modal-head"><h3>${id ? 'Материал' : 'Новый материал'}</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
@@ -1427,7 +1432,7 @@ async function cwRenderSettings() {
     html = block('bell', 'Telegram', '', row('Бот отчётов администратору', 'Настраивается в Админ-панели → Сервисы') + row('Новые изменения на проверку', 'Приходят владельцу, когда подключён исполнитель'));
   } else if (cur === 'dialogs') {
     const mine = (cw.tasks || []).filter(t => t.chat && t.chat.length);
-    html = block('chat', 'Диалоги с приёмщиком', '', mine.length ? mine.map(t => `<div class="emp-profile-row"><span>${fmtShortDate(t.created)}</span><div><a href="#" onclick="cwOpenTask(${jsArg(t.id)});return false;">${escapeHtml(t.title)}</a> · ${t.chat.length} сообщений</div></div>`).join('') : '<div class="empty"><strong>Диалогов пока нет</strong></div>');
+    html = block('chat', 'Диалоги с приёмщиком', '', mine.length ? mine.map(t => `<div class="emp-profile-row"><span>${fmtShortDate(t.created)}</span><div>${cwProjectChip(t.project)}<a href="#" onclick="cwOpenTask(${jsArg(t.id)});return false;">${escapeHtml(t.title)}</a> · ${t.chat.length} сообщений</div></div>`).join('') : '<div class="empty"><strong>Диалогов пока нет</strong></div>');
   } else if (cur === 'security') {
     html = block('lock', 'Вход и ключи', '', row('Вход в портал', 'Корпоративная учётная запись') + row('Вход в WorkFlow', state.user.cw_login ? escapeHtml(state.user.cw_login) : 'администратор') + (state.user.cw_login ? row('Пароль WorkFlow', '<button class="btn secondary" onclick="cwOpenPassword()">Сменить пароль WorkFlow</button>') : '') + row('Журнал действий', 'Админ-панель → Журнал действий'))
       + block('users', 'Учётки WorkFlow', `<button class="btn text" onclick="cwOpenAccountForm()">Добавить учётку</button>`, `<div class="cw-users">${(s.accounts || []).map(a => `<div class="emp-profile-row"><span>${escapeHtml(a.login)}</span><div>${escapeHtml(a.name || '')}${a.must_change ? ' · пароль ещё не сменён' : ''}${a.last_login ? ' · был ' + fmtShortDate(a.last_login) : ''} <button class="btn text" onclick="cwDeleteAccount(${jsArg(a.login)})">Удалить</button></div></div>`).join('') || '<div class="empty"><strong>Учёток пока нет</strong></div>'}</div>`);
@@ -1448,7 +1453,7 @@ const CW_STEPS = [
   ['layers', 'Доступ к Git', () => `<p>Агенты работают с открытым репозиторием кода портала и предлагают изменения на проверку владельцу.</p>${cwStepState(true)}`],
   ['layers', 'Проекты', () => `<p>Задания принимаются по всем продуктам компании: ${escapeHtml(cwProjects().map(p => p.name).join(', '))}. Описание каждого — во вкладке «Проекты».</p>${cwStepState(cwProjects().length > 0)}`],
   ['activity', 'Трекер задач', () => `<p>Задания живут здесь, во вкладке «Мои задания». Внешние трекеры пока не подключены.</p>${cwStepState(false)}`],
-  ['lock', 'Безопасность', () => `<p>Вход — по учётной записи портала. Пароль можно сменить во вкладке «Настройки → Безопасность».</p>${cwStepState(true)}`],
+  ['lock', 'Безопасность', () => `<p>Вход — по отдельной учётной записи WorkFlow, которую заводит администратор. Пароль можно сменить во вкладке «Настройки → Безопасность».</p>${cwStepState(true)}`],
 ];
 function cwStepState(ok) { return ok ? '<span class="req-status done">подключено</span>' : '<span class="req-status cancelled">не подключено</span>'; }
 function cwOnbDone() { try { return localStorage.getItem('cw_onboarding') === 'done'; } catch (e) { return true; } }
@@ -1575,7 +1580,6 @@ function cwChatHtml() {
         </div>
         <button class="btn secondary chat-new" onclick="cw.messages=[];cw.draft='';render()">Новый чат</button>
       </div>
-      <div class="cw-proj-bar no-tr">${cwProjects().map(p => `<button class="cw-proj${p.key === cw.project ? ' active' : ''}" onclick="cwSetProject(${jsArg(p.key)})">${escapeHtml(p.name)}</button>`).join('')}</div>
       <div class="chat-log no-tr" id="cwLog"></div>
       <div class="chat-composer">
         <textarea id="cwInput" rows="1" placeholder="Сообщение…" oninput="cw.draft=this.value; autoGrow(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();cwSend();}"></textarea>
@@ -1591,7 +1595,8 @@ function cwPaint() {
   if (!log) return;
   if (!cw.messages.length && !cw.loading) {
     log.innerHTML = `<div class="chat-empty"><div class="chat-empty-mark"><img src="/static/bot-mark-white.svg" alt=""></div>
-      <div class="chat-empty-title">Что изменить в ${escapeHtml(cwProjectName() || 'продукте')}?</div></div>`;
+      <div class="chat-empty-title">Что изменить в ${escapeHtml(cwProjectName() || 'продукте')}?</div>
+      ${(cwProject() || {}).body ? `<div class="cw-proj-about">${escapeHtml(cwProject().body)}</div>` : ''}</div>`;
     return;
   }
   let html = cw.messages.map((m, i) => {
@@ -1599,7 +1604,7 @@ function cwPaint() {
     const card = m.task ? `
       <div class="draft-card${m.sent ? ' sent' : ''}">
         <div class="draft-head">${ico('activity')}<span>${escapeHtml(m.task.title)}</span></div>
-        <div class="draft-body no-tr"><div class="req-field"><span>Проект</span><b>${escapeHtml(cwProjectName(m.task.project))}</b></div>${['section', 'what', 'who', 'check'].filter(k => m.task[k]).map(k => `<div class="req-field"><span>${({section: 'Раздел', what: 'Что сделать', who: 'Кто увидит', check: 'Как проверить'})[k]}</span><b>${escapeHtml(m.task[k])}</b></div>`).join('')}</div>
+        <div class="draft-body no-tr">${['section', 'what', 'who', 'check'].filter(k => m.task[k]).map(k => `<div class="req-field"><span>${({section: 'Раздел', what: 'Что сделать', who: 'Кто увидит', check: 'Как проверить'})[k]}</span><b>${escapeHtml(m.task[k])}</b></div>`).join('')}</div>
         <div class="draft-foot">${m.sent ? `<div class="draft-done">${ico('check')} Отправлено в работу</div>` : `<button class="btn" onclick="cwSubmitTask(${i})">Отправить в работу</button>`}</div>
       </div>` : '';
     return `<div class="msg bot"><div class="msg-avatar"><img src="/static/bot-mark-white.svg" alt=""></div><div class="bot-col"><div class="bubble bot${m.role === 'error' ? ' error' : ''}">${escapeHtml(m.text).replace(/\n/g, '<br>')}</div>${card}</div></div>`;
@@ -1637,7 +1642,7 @@ async function cwSubmitTask(i) {
   m.sent = true;
   cw.tasks = [res, ...(cw.tasks || [])];
   cw.messages = [];
-  state.coworkTab = 'task-' + res.id;
+  state.coworkTab = cw.project + '.task-' + res.id;
   showToast('Задание отправлено в работу');
   render();
 }

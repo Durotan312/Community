@@ -529,7 +529,7 @@ COWORK_PROJECTS_SEED = [
      "Единое приложение для всех пакетов (Light, Standard, Business, Premium).",
      "", "", "soon"),
     ("wallee", "Wallee Setup", "Настройка и запуск Wallee",
-     "Инструмент настройки и запуска Wallee. Описание уточняется — заполните на вкладке «Проекты».",
+     "Инструмент настройки и запуска Wallee.",
      "", "", "soon"),
 ]
 
@@ -6273,7 +6273,7 @@ _cowork_log = {}
 
 def _cowork_project(db, key):
     """Продукт по ключу; неизвестный ключ — Community (там агент точно есть)."""
-    key = (key or "community").strip().lower()[:40]
+    key = str(key or "community").strip().lower()[:40]
     row = db.execute("SELECT * FROM cowork_projects WHERE key=?", (key,)).fetchone()
     return row or db.execute("SELECT * FROM cowork_projects WHERE key='community'").fetchone()
 
@@ -6563,7 +6563,7 @@ def cowork_notes_all():
     """Вкладка «Замечания»: последние замечания по всем заданиям, с названием задания."""
     if not _can_cowork(current_user()):
         return jsonify({"error": "Нет доступа."}), 403
-    rows = get_db().execute("SELECT n.*, t.title AS task_title, t.status AS task_status FROM cowork_notes n JOIN cowork_tasks t ON t.id=n.task_id "
+    rows = get_db().execute("SELECT n.*, t.title AS task_title, t.status AS task_status, t.project AS project FROM cowork_notes n JOIN cowork_tasks t ON t.id=n.task_id "
                             "ORDER BY n.created DESC LIMIT 100").fetchall()
     return jsonify([dict(r) for r in rows])
 
