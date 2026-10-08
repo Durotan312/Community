@@ -403,7 +403,7 @@ function render() {
   main.classList.remove('fade-in'); void main.offsetWidth; main.classList.add('fade-in');
   // на вкладке чата прячем правую колонку и растягиваем окно на всю высоту
   document.querySelector('.body-row').classList.toggle('chat-mode', state.view === 'aibot');
-  document.body.classList.toggle('cw-mode', state.view === 'cowork' && canCowork());   // Connected WorkFlow — отдельное пространство на весь экран (08.10.2026)
+  document.body.classList.toggle('cw-mode', state.view === 'cowork' && !!state.user);   // Connected WorkFlow — отдельное пространство на весь экран (08.10.2026)
   // в чате страница не прокручивается — только лента сообщений; высоту считаем от реальной шапки
   if (state.view === 'aibot') window.scrollTo(0, 0);  // сначала наверх, потом мерим шапку
   document.documentElement.classList.toggle('chat-open', state.view === 'aibot');
@@ -1126,7 +1126,8 @@ async function clearProfile(employeeId) {
 const cw = { messages: [], draft: '', loading: false, tasks: null, materials: null };
 const CW_STATUS = { queued: ['В очереди', 'queued'], running: ['В работе', 'running'], review: ['Ждёт приёмки', 'review'],
   accepted: ['Принято', 'accepted'], rejected: ['Отклонено', 'rejected'], failed: ['Не удалось', 'failed'], cancelled: ['Отменено', 'cancelled'] };
-function canCowork() { return !!(state.user && (state.user.role === 'admin' || state.user.cowork)); }
+function canCowork() { return !!state.user; }   // пункт виден всем вошедшим; внутри — свой вход (08.10.2026)
+function cwLoggedIn() { return !!(state.user && (state.user.role === 'admin' || state.user.cw_login)); }
 function cwStatus(t) { const s = CW_STATUS[t.status] || [t.status, '']; return `<span class="req-status cw-status ${s[1]}">${s[0]}</span>`; }
 
 const CW_TABS = [['chat', 'Чат-агент'], ['tasks', 'Мои задания'], ['notes', 'Замечания'], ['materials', 'Материалы'], ['settings', 'Настройки']];
@@ -1134,11 +1135,8 @@ const CW_NAV = [['chat', 'Чат-агент', 'chat'], ['tasks', 'Мои зад�
 const CW_SET = [['ai', 'AI-провайдеры', 'Модели и учётки агентов'], ['services', 'Рабочие сервисы', 'Трекеры и базы знаний'], ['git', 'Доступ к Git', 'Репозитории и ключи'],
   ['notify', 'Уведомления', 'Telegram и отчёты'], ['dialogs', 'Мои диалоги', 'Разбор общения с агентом'], ['security', 'Безопасность', 'Защита, ключи и журнал']];
 async function renderCowork(main) {
-  if (!canCowork()) {
-    main.innerHTML = `<div class="section-head"><div><div class="section-title">Connected WorkFlow</div></div></div>
-      <div class="empty"><strong>Доступ выдаёт администратор</strong></div>`;
-    return;
-  }
+  if (!cwLoggedIn()) { main.innerHTML = cwLoginHtml(); return; }
+  if (state.user.cw_must_change) { main.innerHTML = cwPasswordHtml(true); return; }
   if (cw.tasks === null || Date.now() - (cw.loadedAt || 0) > 20000) {
     if (cw.tasks === null) main.innerHTML = '<div class="empty"><strong>Загрузка…</strong></div>';
     const fresh = await fetchJson('/api/cowork/tasks');
@@ -1171,11 +1169,11 @@ async function renderCowork(main) {
         <div class="cw-group">Планирование</div>
         ${CW_NAV.map(([k, name, icon]) => navItem(k, name, icon)).join('')}
         ${isAdmin() ? `<div class="cw-group">Управление</div>${navItem('settings', 'Настройки', 'settings')}` : ''}
-        ${u.cowork_only || isWorkflowEntry() ? `<a class="cw-nav cw-exit" href="#" onclick="doLogout();return false;">${ico('home')}<span>Выйти</span></a>`
-          : `<a class="cw-nav cw-exit" href="#home" onclick="goToView('home');return false;">${ico('home')}<span>На портал</span></a>`}
+        ${u.cw_login ? `<a class="cw-nav" href="#" onclick="cwLogout();return false;">${ico('lock')}<span>Выйти из WorkFlow</span></a>` : ''}
+        <a class="cw-nav cw-exit" href="#home" onclick="goToView('home');return false;">${ico('home')}<span>На портал</span></a>
         <div class="cw-user">
           <div class="org-ava" style="--h:${hueOf(u.name || '')}">${initials(u.name || '')}</div>
-          <div class="cw-user-text"><b>${escapeHtml(u.name || '')}</b><small>${escapeHtml(u.email || u.login || '')}</small></div>
+          <div class="cw-user-text"><b>${escapeHtml(u.name || '')}</b><small>${escapeHtml(u.cw_login || u.login || '')}</small></div>
         </div>
       </aside>
       <div class="cw-body">
@@ -1352,8 +1350,8 @@ async function cwRenderSettings() {
     const mine = (cw.tasks || []).filter(t => t.chat && t.chat.length);
     html = block('chat', 'Диалоги с приёмщиком', '', mine.length ? mine.map(t => `<div class="emp-profile-row"><span>${fmtShortDate(t.created)}</span><div><a href="#" onclick="cwOpenTask(${jsArg(t.id)});return false;">${escapeHtml(t.title)}</a> · ${t.chat.length} сообщений</div></div>`).join('') : '<div class="empty"><strong>Диалогов пока нет</strong></div>');
   } else if (cur === 'security') {
-    html = block('lock', 'Вход и ключи', '', row('Вход', 'Учётная запись портала') + row('Пароль', '<button class="btn secondary" onclick="openChangePassword()">Сменить пароль</button>') + row('Журнал действий', 'Админ-панель → Журнал действий'))
-      + block('users', 'Кому открыт WorkFlow', '', `<div class="cw-users">${s.users.map(u => `<label class="field field-check"><input type="checkbox" ${u.cowork ? 'checked' : ''} onchange="cwToggleUser(${jsArg(u.id)}, this.checked)"><span>${escapeHtml(u.name || u.login)} <em>${ROLE_LABELS[u.role] || ''}</em></span></label>`).join('')}</div>`);
+    html = block('lock', 'Вход и ключи', '', row('Вход в портал', 'Корпоративная учётная запись') + row('Вход в WorkFlow', state.user.cw_login ? escapeHtml(state.user.cw_login) : 'администратор') + (state.user.cw_login ? row('Пароль WorkFlow', '<button class="btn secondary" onclick="cwOpenPassword()">Сменить пароль WorkFlow</button>') : '') + row('Журнал действий', 'Админ-панель → Журнал действий'))
+      + block('users', 'Учётки WorkFlow', `<button class="btn text" onclick="cwOpenAccountForm()">Добавить учётку</button>`, `<div class="cw-users">${(s.accounts || []).map(a => `<div class="emp-profile-row"><span>${escapeHtml(a.login)}</span><div>${escapeHtml(a.name || '')}${a.must_change ? ' · пароль ещё не сменён' : ''}${a.last_login ? ' · был ' + fmtShortDate(a.last_login) : ''} <button class="btn text" onclick="cwDeleteAccount(${jsArg(a.login)})">Удалить</button></div></div>`).join('') || '<div class="empty"><strong>Учёток пока нет</strong></div>'}</div>`);
   }
   box.className = 'cw-set-body no-tr';
   box.innerHTML = html;
@@ -1401,6 +1399,90 @@ function cwOnboarding(step, first) {
         <div class="cw-onb-right">${right}</div>
       </div>
     </div>`);
+}
+
+// вход в WorkFlow отдельной учёткой (08.10.2026)
+function cwLoginHtml() {
+  return `
+    <div class="cw-gate">
+      <div class="cw-gate-box">
+        <div class="cw-brand"><span class="cw-brand-mark">W</span><div><b>Connected WorkFlow</b><small>рабочая среда</small></div></div>
+        <h2>Вход в WorkFlow</h2>
+        <form onsubmit="cwLogin(event)" autocomplete="off">
+          <div class="field"><label for="cwLoginUser">Логин WorkFlow</label><input id="cwLoginUser" autocapitalize="none" autocorrect="off" spellcheck="false" required></div>
+          <div class="field"><label for="cwLoginPass">Пароль</label><input id="cwLoginPass" type="password" required></div>
+          <div class="login-error" id="cwLoginErr" role="alert"></div>
+          <div class="profile-actions"><button class="btn" type="submit">Войти</button><button class="btn secondary" type="button" onclick="goToView('home')">На портал</button></div>
+        </form>
+      </div>
+    </div>`;
+}
+async function cwLogin(e) {
+  e.preventDefault();
+  const err = document.getElementById('cwLoginErr'); err.textContent = '';
+  const r = await fetch('/api/cowork/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login: document.getElementById('cwLoginUser').value.trim(), password: document.getElementById('cwLoginPass').value }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { err.textContent = j.error || 'Не удалось войти.'; return; }
+  state.user.cw_login = j.cw_login; state.user.cw_must_change = j.cw_must_change;
+  cw.tasks = null; render();
+}
+async function cwLogout() {
+  await fetchJson('/api/cowork/logout', { method: 'POST' });
+  state.user.cw_login = ''; state.user.cw_must_change = false; cw.tasks = null; render();
+}
+function cwPasswordHtml(first) {
+  return `
+    <div class="cw-gate">
+      <div class="cw-gate-box">
+        <div class="cw-brand"><span class="cw-brand-mark">W</span><div><b>Connected WorkFlow</b><small>рабочая среда</small></div></div>
+        <h2>${first ? 'Задайте свой пароль' : 'Сменить пароль WorkFlow'}</h2>
+        <form onsubmit="cwChangePassword(event)" autocomplete="off">
+          <div class="field"><label for="cwOldPass">${first ? 'Временный пароль' : 'Старый пароль'}</label><input id="cwOldPass" type="password" required></div>
+          <div class="field"><label for="cwNewPass">Новый пароль</label><input id="cwNewPass" type="password" minlength="8" required></div>
+          <div class="field"><label for="cwNewPass2">Ещё раз</label><input id="cwNewPass2" type="password" minlength="8" required></div>
+          <div class="login-error" id="cwPassErr" role="alert"></div>
+          <div class="profile-actions"><button class="btn" type="submit">Сохранить</button>${first ? '' : '<button class="btn secondary" type="button" onclick="render()">Отмена</button>'}</div>
+        </form>
+      </div>
+    </div>`;
+}
+function cwOpenPassword() { document.querySelector('.cw-content').innerHTML = cwPasswordHtml(false); }
+async function cwChangePassword(e) {
+  e.preventDefault();
+  const err = document.getElementById('cwPassErr'); err.textContent = '';
+  const a = document.getElementById('cwNewPass').value, b = document.getElementById('cwNewPass2').value;
+  if (a !== b) { err.textContent = 'Пароли не совпадают.'; return; }
+  const r = await fetch('/api/cowork/password', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ old: document.getElementById('cwOldPass').value, new: a }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { err.textContent = j.error || 'Не удалось сменить пароль.'; return; }
+  state.user.cw_must_change = false; showToast('Пароль WorkFlow изменён'); render();
+}
+function cwOpenAccountForm() {
+  openModal(`
+    <div class="modal">
+      <div class="modal-head"><h3>Учётка WorkFlow</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
+      <div class="modal-body">
+        <div class="field"><label>Логин — начинается с «super»</label><input id="cwaLogin" type="text" autocapitalize="none" spellcheck="false"></div>
+        <div class="field"><label>Имя</label><input id="cwaName" type="text"></div>
+        <div class="field"><label>Временный пароль — не короче 8 знаков, при первом входе человек его сменит</label><input id="cwaPass" type="text" autocomplete="off"></div>
+        <div class="login-error" id="cwaErr" role="alert"></div>
+      </div>
+      <div class="modal-foot"><button class="btn secondary" onclick="closeModal()">Отмена</button><button class="btn" onclick="cwSaveAccount()">Создать</button></div>
+    </div>`);
+}
+async function cwSaveAccount() {
+  const r = await fetch('/api/cowork/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login: document.getElementById('cwaLogin').value.trim(), name: document.getElementById('cwaName').value.trim(), password: document.getElementById('cwaPass').value }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { document.getElementById('cwaErr').textContent = j.error || 'Не удалось создать.'; return; }
+  closeModal(); showToast('Учётка создана'); cw.settingsAt = 0; render();
+}
+async function cwDeleteAccount(login) {
+  const res = await fetchJson('/api/cowork/accounts/' + encodeURIComponent(login), { method: 'DELETE' });
+  if (!res) { showToast('Не удалось удалить'); return; }
+  showToast('Учётка удалена'); cw.settingsAt = 0; render();
 }
 
 function cwChatHtml() {
@@ -8452,7 +8534,7 @@ const UI_RULES = [
   [/openEventForm\(|deleteItem\('events'/, () => isStaff()],   // календарь ведут HR и админ
   [/openValuesForm\(/, () => isStaff()],   // миссия и ценности правят HR и админ (07.10.2026)
   [/clearProfile\(|openHrFill\(/, () => isStaff()],     // очистить чужой профиль «О себе», заполнить карточку из карточки — HR и админ (07.10.2026)
-  [/coworkDecide\(|coworkLink\(|openCwMaterialForm\(|cwToggleUser\(/, () => isAdmin()],   // приёмка заданий Connected WorkFlow — только админ (08.10.2026)
+  [/coworkDecide\(|coworkLink\(|openCwMaterialForm\(|cwToggleUser\(|cwOpenAccountForm\(|cwDeleteAccount\(/, () => isAdmin()],   // приёмка заданий Connected WorkFlow — только админ (08.10.2026)
   [/openPresentationForm\(|deleteItem\('documents'/, () => isStaff()],   // презентации и буклеты — HR и админ
   [/openProjectForm\(|openPartnerForm\(|openHonorForm\(|openFaqForm\(|openStepForm\(|submitStep\(|openLeaderForm\(|openAboutForm\(|openDocForm\(|deleteItem\('/, () => isAdmin()],
 ];

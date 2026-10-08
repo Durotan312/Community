@@ -164,6 +164,15 @@ SCHEMA = {
         "created": "TEXT NOT NULL",
         "updated": "TEXT NOT NULL",
     },
+    "cowork_accounts": {                 # учётки WorkFlow (08.10.2026): вход внутрь WorkFlow отдельным логином super…
+        "login": "TEXT PRIMARY KEY",
+        "password_hash": "TEXT NOT NULL",
+        "name": "TEXT",
+        "must_change": "INTEGER NOT NULL DEFAULT 1",   # 1 — при первом входе попросить сменить пароль
+        "created": "TEXT NOT NULL",
+        "last_login": "TEXT",
+        "last_user_id": "TEXT",          # под какой учёткой портала входили в последний раз
+    },
     "cowork_notes": {                    # замечания к заданию WorkFlow (08.10.2026): «кнопка не там», агент дорабатывает
         "id": "TEXT PRIMARY KEY",
         "task_id": "TEXT NOT NULL",
@@ -621,7 +630,7 @@ USER_WRITABLE_PREFIX = [
     ("DELETE", "/api/comments/", ""),        # удалить свой комментарий (чужой отсекает обработчик)
     ("PUT", "/api/attendance", ""),          # отметка в табеле: себе; чужую отсекает обработчик
     ("PUT", "/api/english", ""),             # отметка на английском: себе; чужую отсекает обработчик
-    ("POST", "/api/cowork/", ""),            # Connected WorkFlow: чат, задания, замечания — только допущенным, проверяет обработчик (08.10.2026)
+    ("POST", "/api/cowork/", ""),            # Connected WorkFlow: вход, чат, задания, замечания — обработчики сами проверяют вход в WorkFlow (08.10.2026)
     ("POST", "/api/games", ""),              # мини-игры: результат партии и отсчёт времени — только за себя
     ("PUT", "/api/tasks/", ""),              # задачи: править — автор; статус — исполнитель/автор; чужое отсекает обработчик
     ("POST", "/api/tasks/", "/status"),
@@ -692,8 +701,7 @@ def _can_cowork(user):
         return False
     if user["role"] == "admin":
         return True
-    row = get_db().execute("SELECT cowork, cowork_only FROM users WHERE id=?", (user["id"],)).fetchone()
-    return bool(row and (row["cowork"] or row["cowork_only"]))
+    return bool(session.get("cw"))        # вход в WorkFlow отдельной учёткой (08.10.2026: «в воркфлоу провалится — там спросят данные»)
 
 
 def me_json(u):
@@ -705,6 +713,8 @@ def me_json(u):
     d["emp_id"] = emp["id"] if emp else None
     d["english"] = bool(emp and emp["english"])   # есть ли вкладка «Английский язык» в посещаемости
     d["cowork"] = _can_cowork(u)                  # допуск к Connected WorkFlow — current_user() это поле не грузит
+    d["cw_login"] = session.get("cw") or ""       # под какой учёткой WorkFlow вошли (пусто — ещё не входили)
+    d["cw_must_change"] = bool(session.get("cw_must_change"))
     return d
 
 
@@ -6344,6 +6354,95 @@ def cowork_decide(item_id):
     return jsonify(_cowork_json(db.execute("SELECT * FROM cowork_tasks WHERE id=?", (item_id,)).fetchone()))
 
 
+# ---------- вход в WorkFlow отдельной учёткой (08.10.2026) ----------
+# Слова пользователя: «он должен зайти на портал под корп учёткой, а в воркфлоу провалится — типа там спросят данные;
+# я ему даю логин supermisha, а пароль сам придумай, это тестово, потом поменяет, либо сразу страницу смены пароля сделай».
+# Учётки WorkFlow (таблица cowork_accounts) заводит админ, логин начинается с «super». После входа — session["cw"].
+_cw_login_fails = {}
+
+
+@app.route("/api/cowork/login", methods=["POST"])
+def cowork_login():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    login_ = str(data.get("login") or "").strip().lower()
+    password = str(data.get("password") or "")
+    fails, until = _cw_login_fails.get(user["id"], (0, 0))
+    if fails >= 10 and time.time() < until:
+        return jsonify({"error": "Слишком много неверных попыток. Подождите 15 минут."}), 429
+    db = get_db()
+    row = db.execute("SELECT * FROM cowork_accounts WHERE login=?", (login_,)).fetchone()
+    if not row or not check_password_hash(row["password_hash"], password):
+        _cw_login_fails[user["id"]] = ((fails + 1) if time.time() < until else 1, time.time() + 900)
+        return jsonify({"error": "Неверный логин или пароль WorkFlow."}), 401
+    _cw_login_fails.pop(user["id"], None)
+    session["cw"] = login_
+    session["cw_must_change"] = bool(row["must_change"])
+    db.execute("UPDATE cowork_accounts SET last_login=?, last_user_id=? WHERE login=?", (datetime.now().isoformat(timespec="seconds"), user["id"], login_))
+    db.commit()
+    return jsonify({"ok": True, "cw_login": login_, "name": row["name"] or login_, "cw_must_change": bool(row["must_change"])})
+
+
+@app.route("/api/cowork/logout", methods=["POST"])
+def cowork_logout():
+    session.pop("cw", None); session.pop("cw_must_change", None)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/cowork/password", methods=["POST"])
+def cowork_password():
+    """Смена пароля своей учётки WorkFlow (и обязательная при первом входе)."""
+    login_ = session.get("cw")
+    if not login_:
+        return jsonify({"error": "Сначала войдите в WorkFlow."}), 403
+    data = request.get_json(silent=True) or {}
+    old, new = str(data.get("old") or ""), str(data.get("new") or "")
+    db = get_db()
+    row = db.execute("SELECT * FROM cowork_accounts WHERE login=?", (login_,)).fetchone()
+    if not row or not check_password_hash(row["password_hash"], old):
+        return jsonify({"error": "Старый пароль неверный."}), 400
+    if len(new) < 8:
+        return jsonify({"error": "Новый пароль должен быть не короче 8 символов."}), 400
+    db.execute("UPDATE cowork_accounts SET password_hash=?, must_change=0 WHERE login=?", (generate_password_hash(new), login_))
+    db.commit()
+    session["cw_must_change"] = False
+    return jsonify({"ok": True})
+
+
+@app.route("/api/cowork/accounts", methods=["GET", "POST"])
+def cowork_accounts():
+    """Учётки WorkFlow — только админ: список и создание (логин с «super», пароль задаёт админ, при первом входе меняется)."""
+    user = current_user()
+    if not user or user["role"] != "admin":
+        return jsonify({"error": "Учётки WorkFlow ведёт администратор."}), 403
+    db = get_db()
+    if request.method == "GET":
+        return jsonify([dict(r) for r in db.execute("SELECT login, name, must_change, created, last_login FROM cowork_accounts ORDER BY login")])
+    data = request.get_json(silent=True) or {}
+    login_ = str(data.get("login") or "").strip().lower()
+    password = str(data.get("password") or "")
+    if not re.fullmatch(r"super[a-z0-9._-]{1,40}", login_):
+        return jsonify({"error": "Логин должен начинаться с «super» — например supermisha."}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Пароль не короче 8 символов."}), 400
+    if db.execute("SELECT 1 FROM cowork_accounts WHERE login=?", (login_,)).fetchone():
+        return jsonify({"error": "Такая учётка уже есть."}), 400
+    db.execute("INSERT INTO cowork_accounts (login, password_hash, name, must_change, created) VALUES (?,?,?,1,?)",
+               (login_, generate_password_hash(password), str(data.get("name") or "").strip()[:100], datetime.now().isoformat(timespec="seconds")))
+    db.commit()
+    return jsonify({"login": login_, "name": data.get("name") or ""}), 201
+
+
+@app.route("/api/cowork/accounts/<login_>", methods=["DELETE"])
+def cowork_account_delete(login_):
+    user = current_user()
+    if not user or user["role"] != "admin":
+        return jsonify({"error": "Учётки WorkFlow ведёт администратор."}), 403
+    db = get_db()
+    db.execute("DELETE FROM cowork_accounts WHERE login=?", (login_.lower(),)); db.commit()
+    return jsonify({"deleted": login_})
+
+
 @app.route("/api/cowork/tasks/<item_id>/notes", methods=["GET", "POST"])
 def cowork_notes(item_id):
     """Замечания к заданию: любой допущенный читает и пишет (это рабочий разговор о правке, не личные данные)."""
@@ -6430,7 +6529,7 @@ def cowork_settings():
     db = get_db()
     q = {r[0]: r[1] for r in db.execute("SELECT status, COUNT(*) FROM cowork_tasks GROUP BY status")}
     return jsonify({"ai_key": bool(get_api_key()), "repo": "https://github.com/Durotan312/Community", "executor": None,
-                    "queue": q, "users": [dict(r) for r in db.execute("SELECT id, login, name, role, cowork FROM users WHERE role<>'admin' ORDER BY name, login")]})
+                    "queue": q, "accounts": [dict(r) for r in db.execute("SELECT login, name, must_change, created, last_login FROM cowork_accounts ORDER BY login")]})
 
 
 # ---------- leaders (roadmap tab) ----------
