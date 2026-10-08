@@ -1147,6 +1147,7 @@ const CW_NAV = [['chat', 'Чат-агент', 'chat'], ['tasks', 'Задания
 const CW_SET = [['ai', 'AI-провайдеры', 'Модели и учётки агентов'], ['services', 'Рабочие сервисы', 'Трекеры и базы знаний'], ['git', 'Доступ к Git', 'Репозитории и ключи'],
   ['notify', 'Уведомления', 'Telegram и отчёты'], ['dialogs', 'Мои диалоги', 'Разбор общения с агентом'], ['security', 'Безопасность', 'Защита, ключи и журнал']];
 async function renderCowork(main) {
+  if (!(state.user && (state.user.role === 'admin' || state.user.cowork_allowed))) { main.innerHTML = cwDeniedHtml(); return; }   // 08.10.2026: права только у админа и допущенных
   if (!cwLoggedIn()) { main.innerHTML = cwLoginHtml(); return; }
   if (state.user.cw_must_change) { main.innerHTML = cwPasswordHtml(true); return; }
   if (cw.tasks === null || Date.now() - (cw.loadedAt || 0) > 20000) {
@@ -1569,6 +1570,19 @@ function cwOnboarding(step, first) {
     </div>`);
 }
 
+// нет допуска (08.10.2026, слова пользователя: «показать „у вас нет прав“ в это окно»)
+function cwDeniedHtml() {
+  return `
+    <div class="cw-gate">
+      <div class="cw-gate-box cw-denied">
+        <div class="cw-brand"><span class="cw-brand-mark">W</span><div><b>Connected WorkFlow</b><small>рабочая среда</small></div></div>
+        <div class="cw-denied-mark">${ico('lock')}</div>
+        <h2>У вас нет прав</h2>
+        <p>Доступ к Connected WorkFlow выдаёт администратор портала.</p>
+        <div class="profile-actions"><button class="btn" type="button" onclick="goToView('home')">На портал</button></div>
+      </div>
+    </div>`;
+}
 // вход в WorkFlow отдельной учёткой (08.10.2026)
 function cwLoginHtml() {
   return `
@@ -5029,7 +5043,7 @@ function updateRequestsBadge() {
   document.querySelectorAll('.buyer-only').forEach(el => { el.hidden = !seesBuyer(); });
   document.querySelectorAll('.accountant-only').forEach(el => { el.hidden = !seesAccountant(); });
   document.querySelectorAll('.admin-only').forEach(el => { el.hidden = !isAdmin(); });
-  document.querySelectorAll('.cowork-only').forEach(el => { el.hidden = !canCowork(); });
+  document.querySelectorAll('.cowork-only').forEach(el => { el.hidden = !canCowork(); });   // пункт WorkFlow теперь виден всем, без допуска внутри — «У вас нет прав»
   document.querySelectorAll('.side-badge').forEach(b => b.remove());
   const badge = (view, n, title) => {
     const el = document.querySelector(`.nav-item.side[data-view="${view}"]`);

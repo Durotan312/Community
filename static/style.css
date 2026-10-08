@@ -3584,3 +3584,12 @@ body.cw-mode .main{max-width:none;}
 .cw-agent-card .cw-user-text h3{margin:0;font-size:17px;}
 .cw-agent-card .cw-user-text small{display:block;color:var(--ink-soft);font-size:12.5px;}
 .cw-agent-ava{width:40px;height:40px;font-size:14px;flex-shrink:0;}
+
+/* WorkFlow — экран «У вас нет прав» (08.10.2026) */
+.cw-denied{text-align:center;}
+.cw-denied .cw-brand{justify-content:center;}
+.cw-denied-mark{width:56px;height:56px;border-radius:16px;background:var(--orange-tint);color:var(--orange-dark);display:flex;align-items:center;justify-content:center;margin:6px auto 14px;}
+.cw-denied-mark svg{width:26px;height:26px;}
+.cw-denied h2{margin:0 0 8px;font-family:'Mulish',sans-serif;}
+.cw-denied p{color:var(--ink-soft);margin:0 0 18px;}
+.cw-denied .profile-actions{justify-content:center;}

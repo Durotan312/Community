@@ -765,6 +765,14 @@ def user_json(u):
             "cowork_only": bool(u["cowork_only"] if "cowork_only" in u.keys() else 0)}
 
 
+def _cw_allowed(user):
+    """Кому открыт вход в WorkFlow: админ и те, кому админ поставил галочку «Доступ к Connected WorkFlow»
+    (08.10.2026, слова пользователя: «если кто-то попытается зайти — показать „у вас нет прав“; пока права только у админа и у Миши»)."""
+    if not user:
+        return False
+    return user["role"] == "admin" or bool(user["cowork"] if "cowork" in user.keys() else 0)
+
+
 def _can_cowork(user):
     """Connected WorkFlow открыт админу и тем, кому админ поставил допуск (08.10.2026, «только по допуску»)."""
     if not user:
@@ -791,6 +799,7 @@ def me_json(u):
     d["emp_id"] = emp["id"] if emp else None
     d["english"] = bool(emp and emp["english"])   # есть ли вкладка «Английский язык» в посещаемости
     d["cowork"] = _can_cowork(u)                  # допуск к Connected WorkFlow — current_user() это поле не грузит
+    d["cowork_allowed"] = _cw_allowed(u)         # можно ли вообще входить в WorkFlow (08.10.2026: «пока права только у админа и у Миши»)
     d["cw_login"] = session.get("cw") or ""       # под какой учёткой WorkFlow вошли (пусто — ещё не входили)
     d["cw_must_change"] = bool(session.get("cw_must_change"))
     return d
@@ -6500,6 +6509,8 @@ _CW_DUMMY_HASH = generate_password_hash("dummy-" + secrets.token_hex(8))
 @app.route("/api/cowork/login", methods=["POST"])
 def cowork_login():
     user = current_user()
+    if not _cw_allowed(user):
+        return jsonify({"error": "У вас нет прав на Connected WorkFlow. Доступ выдаёт администратор."}), 403
     data = request.get_json(silent=True) or {}
     login_ = str(data.get("login") or "").strip().lower()
     password = str(data.get("password") or "")
