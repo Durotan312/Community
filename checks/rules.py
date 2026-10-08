@@ -144,6 +144,8 @@ CLAUDE_MD_LIMIT = 25000   # знаков; подробности раздела 
 
 def rule_docs_in_order():
     """Описание проекта: ядро короткое, каждый файл docs/ есть в таблице CLAUDE.md."""
+    if not os.path.isdir(os.path.join(ROOT, "docs")):        # открытая копия кода (Community): описания в ней нет намеренно
+        return
     core = read("CLAUDE.md")
     if len(core) > CLAUDE_MD_LIMIT:
         problems.append(f"CLAUDE.md разросся до {len(core)} знаков (предел {CLAUDE_MD_LIMIT}) — подробности раздела перенеси в его файл в docs/")
@@ -159,6 +161,8 @@ TAIL_KINDS = {"test", "text", "decision", "data", "todo"}
 
 
 def rule_tails_readable():
+    if not os.path.exists(os.path.join(ROOT, "tails.json")):  # открытая копия кода — хвостов в ней нет
+        return
     try:
         tails = json.loads(read("tails.json"))
     except (OSError, ValueError) as e:

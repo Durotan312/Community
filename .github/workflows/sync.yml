@@ -1,0 +1,38 @@
+name: На сайт
+
+# Принятое изменение (push в master) переносится в закрытый репозиторий, откуда сервер выкладывает сайт.
+# Нужен секрет STAFF_REPO_TOKEN — токен GitHub с правом записи в закрытый репозиторий.
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.event.head_commit.message, 'Из закрытого репозитория') }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Перенести код в закрытый репозиторий
+        env:
+          TOKEN: ${{ secrets.STAFF_REPO_TOKEN }}
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          if [ -z "$TOKEN" ]; then echo "секрет STAFF_REPO_TOKEN не задан — перенос пропущен"; exit 0; fi
+          git clone -q "https://x-access-token:${TOKEN}@github.com/Durotan312/staff.git" /tmp/staff
+          for item in app.py manage.py requirements.txt Dockerfile docker-compose.yml .dockerignore maintenance.html deploy.sh auto-update.sh static templates checks; do
+            if [ -d "$item" ]; then
+              rsync -a --delete --exclude uploads --exclude public --exclude __pycache__ "$item/" "/tmp/staff/$item/"
+            elif [ -f "$item" ]; then
+              cp "$item" "/tmp/staff/$item"
+            fi
+          done
+          cd /tmp/staff
+          git config user.name "Community sync"
+          git config user.email "sync@community.local"
+          git add -A
+          if git diff --cached --quiet; then echo "нечего переносить"; exit 0; fi
+          git commit -q -m "Из открытого репозитория Community: ${MSG}
+
+          без описания: принято владельцем в открытом репозитории"
+          git push -q origin master

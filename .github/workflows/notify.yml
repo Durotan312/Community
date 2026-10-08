@@ -1,0 +1,28 @@
+name: Сообщить владельцу
+
+# Новый pull request → сообщение владельцу в Telegram со ссылкой «принять».
+# Нужны секреты репозитория: TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID (Settings → Secrets and variables → Actions).
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+jobs:
+  telegram:
+    runs-on: ubuntu-latest
+    if: ${{ vars.NOTIFY_ENABLED != 'false' }}
+    steps:
+      - name: Отправить в Telegram
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TITLE: ${{ github.event.pull_request.title }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$CHAT" ]; then echo "секреты Telegram не заданы — пропускаю"; exit 0; fi
+          TEXT="Предложено изменение портала: ${TITLE}
+          Автор: ${AUTHOR}
+          Проверки запущены. Принять или отклонить: ${URL}"
+          curl -s -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${CHAT}" --data-urlencode "text=${TEXT}" >/dev/null
