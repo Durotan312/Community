@@ -402,6 +402,7 @@ function render() {
   main.classList.remove('fade-in'); void main.offsetWidth; main.classList.add('fade-in');
   // на вкладке чата прячем правую колонку и растягиваем окно на всю высоту
   document.querySelector('.body-row').classList.toggle('chat-mode', state.view === 'aibot');
+  document.body.classList.toggle('cw-mode', state.view === 'cowork' && canCowork());   // Connected WorkFlow — отдельное пространство на весь экран (08.10.2026)
   // в чате страница не прокручивается — только лента сообщений; высоту считаем от реальной шапки
   if (state.view === 'aibot') window.scrollTo(0, 0);  // сначала наверх, потом мерим шапку
   document.documentElement.classList.toggle('chat-open', state.view === 'aibot');
@@ -1128,6 +1129,9 @@ function canCowork() { return !!(state.user && (state.user.role === 'admin' || s
 function cwStatus(t) { const s = CW_STATUS[t.status] || [t.status, '']; return `<span class="req-status cw-status ${s[1]}">${s[0]}</span>`; }
 
 const CW_TABS = [['chat', 'Чат-агент'], ['tasks', 'Мои задания'], ['notes', 'Замечания'], ['materials', 'Материалы'], ['settings', 'Настройки']];
+const CW_NAV = [['chat', 'Чат-агент', 'chat'], ['tasks', 'Мои задания', 'check'], ['notes', 'Замечания', 'edit'], ['materials', 'Материалы', 'book']];
+const CW_SET = [['ai', 'AI-провайдеры', 'Модели и учётки агентов'], ['services', 'Рабочие сервисы', 'Трекеры и базы знаний'], ['git', 'Доступ к Git', 'Репозитории и ключи'],
+  ['notify', 'Уведомления', 'Telegram и отчёты'], ['dialogs', 'Мои диалоги', 'Разбор общения с агентом'], ['security', 'Безопасность', 'Защита, ключи и журнал']];
 async function renderCowork(main) {
   if (!canCowork()) {
     main.innerHTML = `<div class="section-head"><div><div class="section-title">Connected WorkFlow</div></div></div>
@@ -1144,9 +1148,12 @@ async function renderCowork(main) {
   let openId = null;
   if (tab.startsWith('task-')) { openId = tab.slice(5); tab = 'tasks'; }
   else if (cw.tasks.some(t => t.id === tab)) { openId = tab; tab = 'tasks'; }   // старый адрес #cowork/<id>
-  if (!CW_TABS.some(x => x[0] === tab) || (tab === 'settings' && !isAdmin())) { tab = 'chat'; state.coworkTab = 'chat'; }
-  const tabs = CW_TABS.filter(x => x[0] !== 'settings' || isAdmin()).map(([k, name]) =>
-    `<button class="subtab ${k === tab ? ' active' : ''}" onclick="state.coworkTab=${jsArg(k)};render()">${name}${k === 'tasks' && isAdmin() ? cwReviewCount() : ''}</button>`).join('');
+  const known = CW_NAV.some(x => x[0] === tab) || tab === 'settings';
+  if (!known || (tab === 'settings' && !isAdmin())) { tab = 'chat'; state.coworkTab = 'chat'; }
+  const u = state.user || {};
+  const navItem = (k, name, icon) => `<a class="cw-nav${k === tab ? ' active' : ''}" href="#" onclick="state.coworkTab=${jsArg(k)};render();return false;">${ico(icon)}<span>${name}</span>${k === 'tasks' && isAdmin() ? cwReviewCount() : ''}</a>`;
+  const titles = { chat: 'Чат-агент', tasks: openId ? 'Задание' : 'Мои задания', notes: 'Замечания', materials: 'Материалы', settings: 'Настройки' };
+  const crumbs = (tab === 'settings' ? 'Управление' : 'Планирование') + ' · ' + titles[tab];
   let body = '';
   if (openId) {
     const t = cw.tasks.find(x => x.id === openId);
@@ -1155,16 +1162,37 @@ async function renderCowork(main) {
   else if (tab === 'tasks') body = coworkListHtml();
   else if (tab === 'notes') body = '<div id="cwNotesAll" class="empty"><strong>Загрузка…</strong></div>';
   else if (tab === 'materials') body = '<div id="cwMaterials" class="empty"><strong>Загрузка…</strong></div>';
-  else if (tab === 'settings') body = '<div id="cwSettings" class="empty"><strong>Загрузка…</strong></div>';
+  else if (tab === 'settings') body = cwSettingsShell();
   main.innerHTML = `
-    <div class="section-head"><div><div class="section-title">Connected WorkFlow</div></div></div>
-    <div class="subtabs admin-tabs cw-tabs">${tabs}</div>
-    ${body}`;
+    <div class="cw-shell">
+      <aside class="cw-side">
+        <div class="cw-brand"><span class="cw-brand-mark">W</span><div><b>Connected WorkFlow</b><small>рабочая среда</small></div></div>
+        <div class="cw-group">Планирование</div>
+        ${CW_NAV.map(([k, name, icon]) => navItem(k, name, icon)).join('')}
+        ${isAdmin() ? `<div class="cw-group">Управление</div>${navItem('settings', 'Настройки', 'settings')}` : ''}
+        <a class="cw-nav cw-exit" href="#home" onclick="goToView('home');return false;">${ico('home')}<span>На портал</span></a>
+        <div class="cw-user">
+          <div class="org-ava" style="--h:${hueOf(u.name || '')}">${initials(u.name || '')}</div>
+          <div class="cw-user-text"><b>${escapeHtml(u.name || '')}</b><small>${escapeHtml(u.email || u.login || '')}</small></div>
+        </div>
+      </aside>
+      <div class="cw-body">
+        <div class="cw-top">
+          <div>
+            <div class="cw-crumbs">${escapeHtml(crumbs)} · ${fmtShortDate(new Date().toISOString())}</div>
+            <h1 class="cw-h1">${titles[tab]}</h1>
+          </div>
+          <button class="btn secondary cw-onb-btn" onclick="cwOnboarding(0)">${ico('bulb')} Первичная настройка</button>
+        </div>
+        <div class="cw-content">${body}</div>
+      </div>
+    </div>`;
   if (openId) { const t = cw.tasks.find(x => x.id === openId); if (t) cwLoadNotes(t.id); }
   else if (tab === 'chat') { cwPaint(); const i = document.getElementById('cwInput'); if (i) { i.value = cw.draft; } }
   else if (tab === 'notes') cwRenderNotesAll();
   else if (tab === 'materials') cwRenderMaterials();
   else if (tab === 'settings') cwRenderSettings();
+  if (!cwOnbDone()) cwOnboarding(0, true);
 }
 function cwReviewCount() { const n = (cw.tasks || []).filter(t => t.status === 'review').length; return n ? ` <span class="subtab-count">${n}</span>` : ''; }
 function cwOpenTask(id) { state.coworkTab = 'task-' + id; render(); }
@@ -1287,32 +1315,89 @@ async function deleteCwMaterial(id) {
   if (!res) { showToast('Не удалось удалить'); return; }
   showToast('Удалено'); cwRenderMaterials();
 }
+function cwSettingsShell() {
+  const cur = cw.setTab || 'ai';
+  return `
+    <div class="cw-set">
+      <div class="cw-set-nav">
+        ${CW_SET.map(([k, name, sub]) => `<a class="cw-set-item${k === cur ? ' active' : ''}" href="#" onclick="cw.setTab=${jsArg(k)};render();return false;"><b>${name}</b><small>${sub}</small></a>`).join('')}
+      </div>
+      <div class="cw-set-body" id="cwSettings"><div class="empty"><strong>Загрузка…</strong></div></div>
+    </div>`;
+}
 async function cwRenderSettings() {
   const box = document.getElementById('cwSettings');
   if (!box) return;
-  const s = await fetchJson('/api/cowork/settings');
+  if (!cw.settings || Date.now() - (cw.settingsAt || 0) > 20000) { cw.settings = await fetchJson('/api/cowork/settings'); cw.settingsAt = Date.now(); }
+  const s = cw.settings;
   if (!s) { box.innerHTML = '<div class="empty"><strong>Не удалось загрузить</strong></div>'; return; }
-  box.className = 'no-tr';
-  const yes = v => v ? '<span class="req-status done">подключено</span>' : '<span class="req-status rejected">не подключено</span>';
-  box.innerHTML = `
-    <div class="val-block">
-      <div class="val-head"><div class="val-mark">${ico('key')}</div><h3>Доступ к модели</h3>${yes(s.ai_key)}</div>
-      <div class="emp-profile-row"><span>Приёмщик заданий</span><div>Ключ AI портала, лежит на сервере</div></div>
-      <div class="emp-profile-row"><span>Исполнитель (правит код)</span><div>${s.executor ? escapeHtml(s.executor) : 'Не подключён. Этап 2: агент в GitHub, задания из очереди пока делает разработчик'}</div></div>
-    </div>
-    <div class="val-block">
-      <div class="val-head"><div class="val-mark">${ico('layers')}</div><h3>Доступ к Git</h3>${yes(true)}</div>
-      <div class="emp-profile-row"><span>Репозиторий</span><div><a class="cw-link" href="${escapeHtml(s.repo)}" target="_blank" rel="noopener">${escapeHtml(s.repo)}</a></div></div>
-      <div class="emp-profile-row"><span>Путь на сайт</span><div>Принятое изменение → закрытый репозиторий → сайт обновляется сам</div></div>
-    </div>
-    <div class="val-block">
-      <div class="val-head"><div class="val-mark">${ico('users')}</div><h3>Кому открыт WorkFlow</h3></div>
-      <div class="cw-users">${s.users.map(u => `<label class="field field-check"><input type="checkbox" ${u.cowork ? 'checked' : ''} onchange="cwToggleUser(${jsArg(u.id)}, this.checked)"><span>${escapeHtml(u.name || u.login)} <em>${ROLE_LABELS[u.role] || ''}</em></span></label>`).join('')}</div>
-    </div>`;
+  const cur = cw.setTab || 'ai';
+  const yes = v => v ? '<span class="req-status done">подключено</span>' : '<span class="req-status cancelled">не подключено</span>';
+  const block = (icon, title, badge, rows) => `<div class="val-block"><div class="val-head"><div class="val-mark">${ico(icon)}</div><h3>${title}</h3>${badge || ''}</div>${rows}</div>`;
+  const row = (k, v) => `<div class="emp-profile-row"><span>${k}</span><div>${v}</div></div>`;
+  let html = '';
+  if (cur === 'ai') {
+    html = block('key', 'Приёмщик заданий', yes(s.ai_key), row('Модель', 'Та же, что у Connect AI') + row('Ключ', 'На сервере портала, в чат не попадает'))
+      + block('activity', 'Исполнитель — правит код', yes(false), row('Где работает', 'GitHub, отдельно от сайта') + row('Что нужно', 'Ключ модели и токен GitHub — вставляет администратор'));
+  } else if (cur === 'services') {
+    html = block('layers', 'Трекеры и базы знаний', '', '<div class="empty"><strong>Ничего не подключено</strong></div>');
+  } else if (cur === 'git') {
+    html = block('layers', 'Репозиторий', yes(true), row('Открытый код', `<a class="cw-link" href="${escapeHtml(s.repo)}" target="_blank" rel="noopener">${escapeHtml(s.repo)}</a>`)
+      + row('Путь на сайт', 'Принятое изменение → закрытый репозиторий → сайт обновляется сам') + row('Правила для агентов', `<a class="cw-link" href="${escapeHtml(s.repo)}/blob/master/AGENTS.md" target="_blank" rel="noopener">AGENTS.md</a>`));
+  } else if (cur === 'notify') {
+    html = block('bell', 'Telegram', '', row('Бот отчётов администратору', 'Настраивается в Админ-панели → Сервисы') + row('Новые изменения на проверку', 'Приходят владельцу, когда подключён исполнитель'));
+  } else if (cur === 'dialogs') {
+    const mine = (cw.tasks || []).filter(t => t.chat && t.chat.length);
+    html = block('chat', 'Диалоги с приёмщиком', '', mine.length ? mine.map(t => `<div class="emp-profile-row"><span>${fmtShortDate(t.created)}</span><div><a href="#" onclick="cwOpenTask(${jsArg(t.id)});return false;">${escapeHtml(t.title)}</a> · ${t.chat.length} сообщений</div></div>`).join('') : '<div class="empty"><strong>Диалогов пока нет</strong></div>');
+  } else if (cur === 'security') {
+    html = block('lock', 'Вход и ключи', '', row('Вход', 'Учётная запись портала') + row('Пароль', '<button class="btn secondary" onclick="openChangePassword()">Сменить пароль</button>') + row('Журнал действий', 'Админ-панель → Журнал действий'))
+      + block('users', 'Кому открыт WorkFlow', '', `<div class="cw-users">${s.users.map(u => `<label class="field field-check"><input type="checkbox" ${u.cowork ? 'checked' : ''} onchange="cwToggleUser(${jsArg(u.id)}, this.checked)"><span>${escapeHtml(u.name || u.login)} <em>${ROLE_LABELS[u.role] || ''}</em></span></label>`).join('')}</div>`);
+  }
+  box.className = 'cw-set-body no-tr';
+  box.innerHTML = html;
 }
 async function cwToggleUser(id, on) {
   const res = await fetchJson('/api/users/' + encodeURIComponent(id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cowork: on }) });
   showToast(res ? (on ? 'Доступ открыт' : 'Доступ закрыт') : 'Не удалось сохранить');
+}
+
+// мастер «Первичная настройка» (08.10.2026, образец пользователя: доступ к моделям, Git, трекер задач, безопасность);
+// показывается один раз при первом входе, потом — по кнопке
+const CW_STEPS = [
+  ['key', 'Доступ к моделям', () => `<p>Основной инструмент платформы — агент на ключе AI портала. Ключ лежит на сервере, вставлять ничего не нужно.</p>${cwStepState(true)}`],
+  ['layers', 'Доступ к Git', () => `<p>Агенты работают с открытым репозиторием кода портала и предлагают изменения на проверку владельцу.</p>${cwStepState(true)}`],
+  ['activity', 'Трекер задач', () => `<p>Задания живут здесь, во вкладке «Мои задания». Внешние трекеры пока не подключены.</p>${cwStepState(false)}`],
+  ['lock', 'Безопасность', () => `<p>Вход — по учётной записи портала. Пароль можно сменить во вкладке «Настройки → Безопасность».</p>${cwStepState(true)}`],
+];
+function cwStepState(ok) { return ok ? '<span class="req-status done">подключено</span>' : '<span class="req-status cancelled">не подключено</span>'; }
+function cwOnbDone() { try { return localStorage.getItem('cw_onboarding') === 'done'; } catch (e) { return true; } }
+function cwOnbFinish() { try { localStorage.setItem('cw_onboarding', 'done'); } catch (e) { /* приватный режим */ } closeModal(); }
+function cwOnboarding(step, first) {
+  const u = state.user || {};
+  const list = CW_STEPS.map(([icon, name], i) => `<div class="cw-onb-step${i === step - 1 ? ' active' : ''}${i < step - 1 ? ' done' : ''}">${ico(icon)}<div><b>${name}</b><small>Шаг ${i + 1} из ${CW_STEPS.length}</small></div></div>`).join('');
+  const pct = Math.round(Math.max(0, step - 1) / CW_STEPS.length * 100);
+  let right;
+  if (step === 0) {
+    right = `<div class="cw-onb-hero">${ico('activity')}</div><h3>Добро пожаловать, ${escapeHtml((u.name || '').split(' ').slice(-1)[0] || '')}!</h3>
+      <p>Connected WorkFlow — рабочее пространство для заданий с AI-агентами. За минуту посмотрим доступ к моделям, Git, задачи и безопасность. Любой шаг можно пропустить.</p>
+      <div class="cw-onb-foot"><button class="btn text" onclick="cwOnbFinish()">Пропустить всё</button><button class="btn" onclick="cwOnboarding(1)">Начать настройку</button></div>`;
+  } else if (step > CW_STEPS.length) {
+    right = `<div class="cw-onb-hero">${ico('check')}</div><h3>Готово</h3><p>Пространство настроено. Начните с вкладки «Чат-агент».</p>
+      <div class="cw-onb-foot"><button class="btn" onclick="cwOnbFinish()">Открыть WorkFlow</button></div>`;
+  } else {
+    const [icon, name, content] = CW_STEPS[step - 1];
+    right = `<div class="cw-onb-title">${ico(icon)}<h3>${name}</h3></div>${content()}
+      <div class="cw-onb-foot"><button class="btn text" onclick="cwOnboarding(${step - 1})">Назад</button><span style="flex:1"></span>
+        <button class="btn secondary" onclick="cwOnboarding(${step + 1})">Пропустить</button><button class="btn" onclick="cwOnboarding(${step + 1})">Дальше</button></div>`;
+  }
+  openModal(`
+    <div class="modal cw-onb">
+      <div class="modal-head"><h3>Первичная настройка</h3><button class="modal-close" onclick="${first ? 'cwOnbFinish()' : 'closeModal()'}">&times;</button></div>
+      <div class="cw-onb-body">
+        <div class="cw-onb-steps"><div class="cw-brand"><span class="cw-brand-mark">W</span><div><b>WorkFlow</b><small>Первичная настройка</small></div></div>${list}<div class="cw-onb-pct"><i style="width:${pct}%"></i></div><small>${pct}% настроено</small></div>
+        <div class="cw-onb-right">${right}</div>
+      </div>
+    </div>`);
 }
 
 function cwChatHtml() {

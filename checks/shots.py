@@ -63,6 +63,8 @@ def main():
             for v in views:
                 try:
                     page.goto(base + "/#" + v)
+                    if "--onb-done" in args:                  # WorkFlow: мастер первичной настройки уже пройден
+                        page.evaluate("localStorage.setItem('cw_onboarding', 'done')")
                     if "--dark" in args:                      # тёмная тема — как её включает сам пользователь в настройках
                         page.evaluate("localStorage.setItem('cs_settings', JSON.stringify(Object.assign({}, JSON.parse(localStorage.getItem('cs_settings') || '{}'), {theme: 'dark'})))")
                     page.reload()

@@ -3442,3 +3442,80 @@ html[data-theme="dark"] .cw-status.running{background:#17273A;color:#8FBFF0;}
 .cw-users{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:4px 16px;}
 .cw-users em{font-style:normal;color:var(--ink-soft);font-size:12px;margin-left:6px;}
 @media (max-width:600px){.cw-note-form{flex-direction:column;}.cw-note-form .btn{align-self:flex-end;}}
+
+/* Connected WorkFlow — отдельное пространство на весь экран (08.10.2026, по образцу Workflow в фирменных цветах) */
+body.cw-mode .masthead,body.cw-mode .sidenav,body.cw-mode .sidenav-handle,body.cw-mode .side-widgets,body.cw-mode .site-footer{display:none !important;}
+body.cw-mode .body-row{max-width:none;padding:0;gap:0;}
+body.cw-mode .main{padding:0;}
+.cw-shell{display:flex;min-height:100vh;}
+.cw-side{width:260px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:18px 14px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;}
+.cw-brand{display:flex;align-items:center;gap:10px;padding:6px 8px 16px;}
+.cw-brand-mark{width:36px;height:36px;border-radius:10px;background:var(--orange);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Mulish',sans-serif;font-weight:800;font-size:18px;flex-shrink:0;}
+.cw-brand b{display:block;font-family:'Mulish',sans-serif;font-size:14.5px;}
+.cw-brand small{color:var(--ink-soft);font-size:12px;}
+.cw-group{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);padding:14px 10px 6px;}
+.cw-nav{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;color:var(--ink);text-decoration:none;font-weight:600;font-size:14px;}
+.cw-nav svg{width:18px;height:18px;color:var(--ink-soft);flex-shrink:0;}
+.cw-nav:hover{background:var(--bg-soft);}
+.cw-nav.active{background:var(--orange);color:#fff;}
+.cw-nav.active svg{color:#fff;}
+.cw-nav .subtab-count{margin-left:auto;background:#fff;color:var(--orange);border-radius:999px;padding:0 7px;font-size:12px;}
+.cw-exit{margin-top:auto;color:var(--ink-soft);}
+.cw-user{display:flex;align-items:center;gap:10px;padding:12px 8px 4px;border-top:1px solid var(--border);margin-top:8px;}
+.cw-user-text{min-width:0;}
+.cw-user-text b{display:block;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cw-user-text small{display:block;color:var(--ink-soft);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cw-body{flex:1;min-width:0;background:var(--bg);}
+.cw-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:22px 32px 14px;background:var(--surface);border-bottom:1px solid var(--border);}
+.cw-crumbs{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--orange);}
+.cw-h1{font-family:'Mulish',sans-serif;font-size:24px;margin:4px 0 0;}
+.cw-onb-btn{flex-shrink:0;}
+.cw-onb-btn svg{width:16px;height:16px;margin-right:6px;vertical-align:-3px;}
+.cw-content{padding:24px 32px 60px;max-width:1100px;}
+.cw-content .chat-shell{min-height:60vh;}
+.cw-set{display:flex;gap:22px;align-items:flex-start;}
+.cw-set-nav{width:250px;flex-shrink:0;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:8px;display:flex;flex-direction:column;gap:2px;}
+.cw-set-item{display:block;padding:10px 12px;border-radius:10px;text-decoration:none;color:var(--ink);}
+.cw-set-item b{display:block;font-size:14px;}
+.cw-set-item small{color:var(--ink-soft);font-size:12px;}
+.cw-set-item:hover{background:var(--bg-soft);}
+.cw-set-item.active{background:var(--orange-tint);}
+.cw-set-item.active b{color:var(--orange-dark);}
+.cw-set-body{flex:1;min-width:0;}
+.cw-onb{max-width:860px;width:min(860px,96vw);}
+.cw-onb-body{display:flex;min-height:380px;}
+.cw-onb-steps{width:260px;flex-shrink:0;background:var(--bg-soft);padding:18px 16px;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:6px;}
+.cw-onb-step{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid transparent;}
+.cw-onb-step svg{width:18px;height:18px;color:var(--ink-soft);flex-shrink:0;}
+.cw-onb-step b{display:block;font-size:13.5px;}
+.cw-onb-step small{color:var(--ink-soft);font-size:12px;}
+.cw-onb-step.active{background:var(--surface);border-color:var(--orange);}
+.cw-onb-step.active svg,.cw-onb-step.done svg{color:var(--orange);}
+.cw-onb-pct{height:6px;border-radius:999px;background:var(--border);margin-top:auto;overflow:hidden;}
+.cw-onb-pct i{display:block;height:100%;background:var(--orange);}
+.cw-onb-steps>small{color:var(--ink-soft);font-size:12px;}
+.cw-onb-right{flex:1;padding:26px 28px;display:flex;flex-direction:column;}
+.cw-onb-right p{color:var(--ink-soft);line-height:1.55;max-width:60ch;}
+.cw-onb-hero{width:52px;height:52px;border-radius:14px;background:var(--orange);color:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:14px;}
+.cw-onb-hero svg{width:26px;height:26px;}
+.cw-onb-title{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+.cw-onb-title svg{width:22px;height:22px;color:var(--orange);}
+.cw-onb-title h3,.cw-onb-right h3{margin:0;font-family:'Mulish',sans-serif;font-size:20px;}
+.cw-onb-foot{display:flex;gap:10px;align-items:center;margin-top:auto;padding-top:18px;}
+@media (max-width:900px){
+  .cw-shell{flex-direction:column;}
+  .cw-side{width:auto;height:auto;position:static;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 12px;border-right:0;border-bottom:1px solid var(--border);}
+  .cw-brand{padding:0 6px;width:100%;}
+  .cw-group,.cw-user{display:none;}
+  .cw-exit{margin-top:0;}
+  .cw-top,.cw-content{padding-left:16px;padding-right:16px;}
+  .cw-top{flex-wrap:wrap;}
+  .cw-onb-btn{order:3;}
+  .cw-h1{font-size:20px;}
+  .cw-set{flex-direction:column;}
+  .cw-set-nav{width:100%;flex-direction:row;flex-wrap:wrap;}
+  .cw-onb-body{flex-direction:column;}
+  .cw-onb-steps{width:auto;border-right:0;border-bottom:1px solid var(--border);}
+}
+body.cw-mode .body-row,body.cw-mode .body-row.chat-mode,body.cw-mode .body-row:not(.chat-mode):not(.org-mode){margin-left:0 !important;margin-right:0 !important;max-width:none !important;width:auto !important;padding:0 !important;}
+body.cw-mode .main{max-width:none;}
