@@ -148,9 +148,9 @@ SCHEMA = {
         "must_set_password": "INTEGER NOT NULL DEFAULT 0",
         "created": "TEXT NOT NULL DEFAULT ''",
         "last_login": "TEXT",
-        "cowork": "INTEGER NOT NULL DEFAULT 0",   # допуск к Connected Cowork (08.10.2026): ставит админ; у admin всегда есть
+        "cowork": "INTEGER NOT NULL DEFAULT 0",   # допуск к Connected WorkFlow (08.10.2026): ставит админ; у admin всегда есть
     },
-    "cowork_tasks": {                    # Connected Cowork (08.10.2026): задания агенту на изменение портала
+    "cowork_tasks": {                    # Connected WorkFlow (08.10.2026): задания агенту на изменение портала
         "id": "TEXT PRIMARY KEY",
         "author_id": "TEXT NOT NULL",
         "author_name": "TEXT",
@@ -160,6 +160,22 @@ SCHEMA = {
         "status": "TEXT NOT NULL DEFAULT 'queued'",   # queued → running → review → accepted / rejected / failed / cancelled
         "pr_url": "TEXT",                # ссылка на изменение (pull request в открытом репозитории)
         "result": "TEXT",                # отчёт исполнителя или комментарий владельца
+        "created": "TEXT NOT NULL",
+        "updated": "TEXT NOT NULL",
+    },
+    "cowork_notes": {                    # замечания к заданию WorkFlow (08.10.2026): «кнопка не там», агент дорабатывает
+        "id": "TEXT PRIMARY KEY",
+        "task_id": "TEXT NOT NULL",
+        "author_id": "TEXT NOT NULL",
+        "author_name": "TEXT",
+        "text": "TEXT NOT NULL",
+        "created": "TEXT NOT NULL",
+    },
+    "cowork_materials": {                # материалы для агента (08.10.2026): что он должен знать о продукте; ведёт админ
+        "id": "TEXT PRIMARY KEY",
+        "title": "TEXT NOT NULL",
+        "body": "TEXT",
+        "url": "TEXT",
         "created": "TEXT NOT NULL",
         "updated": "TEXT NOT NULL",
     },
@@ -604,7 +620,7 @@ USER_WRITABLE_PREFIX = [
     ("DELETE", "/api/comments/", ""),        # удалить свой комментарий (чужой отсекает обработчик)
     ("PUT", "/api/attendance", ""),          # отметка в табеле: себе; чужую отсекает обработчик
     ("PUT", "/api/english", ""),             # отметка на английском: себе; чужую отсекает обработчик
-    ("POST", "/api/cowork/", ""),            # Connected Cowork: чат, задания — только допущенным, проверяет обработчик (08.10.2026)
+    ("POST", "/api/cowork/", ""),            # Connected WorkFlow: чат, задания, замечания — только допущенным, проверяет обработчик (08.10.2026)
     ("POST", "/api/games", ""),              # мини-игры: результат партии и отсчёт времени — только за себя
     ("PUT", "/api/tasks/", ""),              # задачи: править — автор; статус — исполнитель/автор; чужое отсекает обработчик
     ("POST", "/api/tasks/", "/status"),
@@ -669,7 +685,7 @@ def user_json(u):
 
 
 def _can_cowork(user):
-    """Connected Cowork открыт админу и тем, кому админ поставил допуск (08.10.2026, «только по допуску»)."""
+    """Connected WorkFlow открыт админу и тем, кому админ поставил допуск (08.10.2026, «только по допуску»)."""
     if not user:
         return False
     if user["role"] == "admin":
@@ -686,7 +702,7 @@ def me_json(u):
     emp = _my_employee(get_db(), d)
     d["emp_id"] = emp["id"] if emp else None
     d["english"] = bool(emp and emp["english"])   # есть ли вкладка «Английский язык» в посещаемости
-    d["cowork"] = _can_cowork(u)                  # допуск к Connected Cowork — current_user() это поле не грузит
+    d["cowork"] = _can_cowork(u)                  # допуск к Connected WorkFlow — current_user() это поле не грузит
     return d
 
 
@@ -1047,7 +1063,7 @@ def users():
         "INSERT INTO users (id, login, password_hash, name, role, email, created, cowork) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (uid, login_, generate_password_hash(password) if not invite_mode else "!invited",
          (data.get("name") or "").strip(), role, email, datetime.now().isoformat(timespec="seconds"),
-         1 if data.get("cowork") in (1, True, "1", "true") else 0),   # допуск к Connected Cowork ставится и при создании
+         1 if data.get("cowork") in (1, True, "1", "true") else 0),   # допуск к Connected WorkFlow ставится и при создании
     )
     out = {"id": uid, "login": login_, "name": data.get("name") or "", "role": role, "email": email}
     if invite_mode:
@@ -1079,7 +1095,7 @@ def user_item(item_id):
         db.execute("UPDATE users SET role=? WHERE id=?", (role, item_id))
     if "email" in data:
         db.execute("UPDATE users SET email=? WHERE id=?", ((data.get("email") or "").strip().lower(), item_id))
-    if "cowork" in data:                                      # допуск к Connected Cowork — только админ (мы уже под /api/users)
+    if "cowork" in data:                                      # допуск к Connected WorkFlow — только админ (мы уже под /api/users)
         db.execute("UPDATE users SET cowork=? WHERE id=?", (1 if data["cowork"] in (1, True, "1", "true") else 0, item_id))
     invite_url = None
     if data.get("reinvite"):
@@ -2866,13 +2882,13 @@ def _services_state(db):
              ("Отчёт об опозданиях", "понедельник, 09:00 — вместо письма" if hrbot_ready() else "понедельник, 09:00 — письмом, пока HR не подключит Telegram"), ("Дни рождения", f"в сам день, {HRBOT_BDAY_HOUR:02d}:00"), ("Праздники", f"за {HRBOT_HOLIDAY_DAYS} дня, {HRBOT_BDAY_HOUR:02d}:00"),
              ("Последнее сообщение", _svc_when(m.get("ok_at"))),
              ("Последняя ошибка", f"{m.get('err')} ({_svc_when(m.get('err_at'))})" if m.get("err_at") else "")])
-    # Connected Cowork: приёмщик (тот же ключ AI), очередь заданий, исполнитель — этап 2
+    # Connected WorkFlow: приёмщик (тот же ключ AI), очередь заданий, исполнитель — этап 2
     m = _svc_get("cowork")
     q = {r[0]: r[1] for r in db.execute("SELECT status, COUNT(*) FROM cowork_tasks GROUP BY status")}
     cw_state = "off" if not get_api_key() else ("bad" if _svc_failed(m) else "ok")
-    add("cowork", "Connected Cowork", cw_state, {"off": "нет ключа AI", "bad": "приёмщик не отвечает", "ok": "работает"}[cw_state],
+    add("cowork", "Connected WorkFlow", cw_state, {"off": "нет ключа AI", "bad": "приёмщик не отвечает", "ok": "работает"}[cw_state],
         [("В очереди", q.get("queued", 0)), ("Ждут приёмки", q.get("review", 0)), ("Принято", q.get("accepted", 0)),
-         ("Исполнитель", "не подключён — этап 2 (GitHub)"),
+         ("Исполнитель", "не подключён — этап 2 (GitHub)"), ("Замечаний", db.execute("SELECT COUNT(*) FROM cowork_notes").fetchone()[0]),
          ("Последнее сообщение", _svc_when(m.get("ok_at"))),
          ("Последняя ошибка", f"{m.get('err')} ({_svc_when(m.get('err_at'))})" if m.get("err_at") else "")])
     return out
@@ -6138,14 +6154,14 @@ def values_put(key):
     return jsonify(_values(db))
 
 
-# ---------- Connected Cowork (08.10.2026) ----------
+# ---------- Connected WorkFlow (08.10.2026) ----------
 # Слова пользователя: «PM или аналитик пишут агенту „хочу поменять на портале то-то“, и через агента это всё делается»;
-# «пусть он будет внутри Community: создай в инструментах вкладку Connected Cowork». Его решения кнопками: доступ только по
+# «пусть он будет внутри Community: создай в инструментах вкладку Connected Cowork» (переименовано в WorkFlow 08.10). Его решения кнопками: доступ только по
 # допуску; исполнитель — Claude, позже, работает в GitHub отдельно от сайта; лимита заданий нет; переписка в базу знаний
 # Connect AI не попадает; ничего не уезжает на сайт без его кнопки «Принять». Этап 1 — приёмщик, очередь, приёмка;
 # этап 2 — исполнитель (docs/cowork.md).
 COWORK_PER_HOUR = 60
-COWORK_PROMPT = """Ты — приёмщик заданий в Connected Cowork, инструменте внутреннего портала компании Connected Home. \
+COWORK_PROMPT = """Ты — приёмщик заданий в Connected WorkFlow, инструменте внутреннего портала компании Connected Home. \
 К тебе приходят менеджеры и аналитики, которые хотят что-то изменить на портале. Твоя работа — превратить просьбу в чёткое \
 задание для разработчика, не делая его самому.
 
@@ -6183,7 +6199,7 @@ def cowork_chat():
     """Чат с приёмщиком: уточняет просьбу и в конце отдаёт карточку задания; отправляет его в работу сам человек кнопкой."""
     user = current_user()
     if not _can_cowork(user):
-        return jsonify({"error": "Connected Cowork открыт только по допуску администратора."}), 403
+        return jsonify({"error": "Connected WorkFlow открыт только по допуску администратора."}), 403
     now = time.time()
     recent = [t for t in _cowork_log.get(user["id"], []) if now - t < 3600]
     if len(recent) >= COWORK_PER_HOUR:
@@ -6233,7 +6249,7 @@ def cowork_chat():
 def cowork_tasks():
     user = current_user()
     if not _can_cowork(user):
-        return jsonify({"error": "Connected Cowork открыт только по допуску администратора."}), 403
+        return jsonify({"error": "Connected WorkFlow открыт только по допуску администратора."}), 403
     db = get_db()
     if request.method == "GET":
         rows = db.execute("SELECT * FROM cowork_tasks ORDER BY created DESC LIMIT 200").fetchall()
@@ -6309,6 +6325,95 @@ def cowork_decide(item_id):
         return jsonify({"error": "Неизвестное решение."}), 400
     db.commit()
     return jsonify(_cowork_json(db.execute("SELECT * FROM cowork_tasks WHERE id=?", (item_id,)).fetchone()))
+
+
+@app.route("/api/cowork/tasks/<item_id>/notes", methods=["GET", "POST"])
+def cowork_notes(item_id):
+    """Замечания к заданию: любой допущенный читает и пишет (это рабочий разговор о правке, не личные данные)."""
+    user = current_user()
+    if not _can_cowork(user):
+        return jsonify({"error": "Нет доступа."}), 403
+    db = get_db()
+    if db.execute("SELECT 1 FROM cowork_tasks WHERE id=?", (item_id,)).fetchone() is None:
+        return jsonify({"error": "Задание не найдено."}), 404
+    if request.method == "GET":
+        return jsonify([dict(r) for r in db.execute("SELECT * FROM cowork_notes WHERE task_id=? ORDER BY created", (item_id,))])
+    text = str((request.get_json(silent=True) or {}).get("text") or "").strip()[:2000]
+    if not text:
+        return jsonify({"error": "Пустое замечание."}), 400
+    now = datetime.now().isoformat(timespec="seconds")
+    nid = uuid.uuid4().hex
+    db.execute("INSERT INTO cowork_notes (id, task_id, author_id, author_name, text, created) VALUES (?,?,?,?,?,?)",
+               (nid, item_id, user["id"], user["name"] or user["login"], text, now))
+    db.execute("UPDATE cowork_tasks SET updated=? WHERE id=?", (now, item_id))
+    db.commit()
+    return jsonify(dict(db.execute("SELECT * FROM cowork_notes WHERE id=?", (nid,)).fetchone())), 201
+
+
+@app.route("/api/cowork/notes", methods=["GET"])
+def cowork_notes_all():
+    """Вкладка «Замечания»: последние замечания по всем заданиям, с названием задания."""
+    if not _can_cowork(current_user()):
+        return jsonify({"error": "Нет доступа."}), 403
+    rows = get_db().execute("SELECT n.*, t.title AS task_title, t.status AS task_status FROM cowork_notes n JOIN cowork_tasks t ON t.id=n.task_id "
+                            "ORDER BY n.created DESC LIMIT 100").fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/cowork/materials", methods=["GET", "POST"])
+def cowork_materials():
+    """Материалы для агента: читают допущенные, ведёт админ."""
+    user = current_user()
+    if not _can_cowork(user):
+        return jsonify({"error": "Нет доступа."}), 403
+    db = get_db()
+    if request.method == "GET":
+        return jsonify([dict(r) for r in db.execute("SELECT * FROM cowork_materials ORDER BY updated DESC")])
+    if user["role"] != "admin":
+        return jsonify({"error": "Материалы ведёт администратор."}), 403
+    data = request.get_json(silent=True) or {}
+    title = str(data.get("title") or "").strip()[:200]
+    if not title:
+        return jsonify({"error": "Нужно название."}), 400
+    now = datetime.now().isoformat(timespec="seconds")
+    mid = uuid.uuid4().hex
+    db.execute("INSERT INTO cowork_materials (id, title, body, url, created, updated) VALUES (?,?,?,?,?,?)",
+               (mid, title, str(data.get("body") or "").strip()[:8000], _clean_url(str(data.get("url") or "")), now, now))
+    db.commit()
+    return jsonify(dict(db.execute("SELECT * FROM cowork_materials WHERE id=?", (mid,)).fetchone())), 201
+
+
+@app.route("/api/cowork/materials/<item_id>", methods=["PUT", "DELETE"])
+def cowork_material(item_id):
+    user = current_user()
+    if not user or user["role"] != "admin":
+        return jsonify({"error": "Материалы ведёт администратор."}), 403
+    db = get_db()
+    if db.execute("SELECT 1 FROM cowork_materials WHERE id=?", (item_id,)).fetchone() is None:
+        return jsonify({"error": "Материал не найден."}), 404
+    if request.method == "DELETE":
+        db.execute("DELETE FROM cowork_materials WHERE id=?", (item_id,)); db.commit()
+        return jsonify({"deleted": item_id})
+    data = request.get_json(silent=True) or {}
+    title = str(data.get("title") or "").strip()[:200]
+    if not title:
+        return jsonify({"error": "Нужно название."}), 400
+    db.execute("UPDATE cowork_materials SET title=?, body=?, url=?, updated=? WHERE id=?",
+               (title, str(data.get("body") or "").strip()[:8000], _clean_url(str(data.get("url") or "")), datetime.now().isoformat(timespec="seconds"), item_id))
+    db.commit()
+    return jsonify(dict(db.execute("SELECT * FROM cowork_materials WHERE id=?", (item_id,)).fetchone()))
+
+
+@app.route("/api/cowork/settings", methods=["GET"])
+def cowork_settings():
+    """Вкладка «Настройки» (только админ): что подключено. Ключи наружу не отдаются — только «есть / нет»."""
+    user = current_user()
+    if not user or user["role"] != "admin":
+        return jsonify({"error": "Настройки видит только администратор."}), 403
+    db = get_db()
+    q = {r[0]: r[1] for r in db.execute("SELECT status, COUNT(*) FROM cowork_tasks GROUP BY status")}
+    return jsonify({"ai_key": bool(get_api_key()), "repo": "https://github.com/Durotan312/Community", "executor": None,
+                    "queue": q, "users": [dict(r) for r in db.execute("SELECT id, login, name, role, cowork FROM users WHERE role<>'admin' ORDER BY name, login")]})
 
 
 # ---------- leaders (roadmap tab) ----------
