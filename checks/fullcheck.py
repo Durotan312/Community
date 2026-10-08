@@ -247,6 +247,8 @@ rw = ADM.post(f"/api/cowork/tasks/{cta['id']}/decide", json={"decision": "rework
 check(rw.status_code == 200 and rw.get_json()["status"] == "queued" and rw.get_json()["rework"] == 1 and len(ADM.get(f"/api/cowork/tasks/{cta['id']}/notes").get_json()) == 1, "«На доработку» вернуло задание в очередь с замечанием")
 check(ADM.post(f"/api/cowork/tasks/{cta['id']}/decide", json={"decision": "rework"}).status_code == 400, "доработка без текста не принимается")
 ANON.post("/api/cowork/runner/next", headers=RH); ANON.post(f"/api/cowork/runner/report/{cta['id']}", json={"status": "review", "mr_id": "7", "usage": {"cost": 0.25}}, headers=RH)
+_real_ready = app._cw_mr_ready
+app._cw_mr_ready = lambda pr, task: ""
 _real_merge = app._cw_merge
 app._cw_merge = lambda pr, task: "" if pr["token"] == "glpat-test-token-12345" and task["mr_id"] == "7" else "нет"
 check(ADM.post(f"/api/cowork/tasks/{cta['id']}/decide", json={"decision": "accept"}).get_json()["status"] == "accepted", "«Принять» слил merge request токеном проекта")
@@ -254,7 +256,7 @@ app._cw_merge = lambda pr, task: "Не удалось слить изменен�
 ct3 = ok(EMP.post("/api/cowork/tasks", json={"title": "Третье", "spec": {"what": "x"}, "project": "aiva"}), "третье задание")
 ANON.post("/api/cowork/runner/next", headers=RH); ANON.post(f"/api/cowork/runner/report/{ct3['id']}", json={"status": "review", "mr_id": "8", "usage": {"cost": 1}}, headers=RH)
 check(ADM.post(f"/api/cowork/tasks/{ct3['id']}/decide", json={"decision": "accept"}).status_code == 502 and next(t for t in ADM.get("/api/cowork/tasks").get_json() if t["id"] == ct3["id"])["status"] == "review", "слияние не удалось — задание остаётся на приёмке с понятной ошибкой")
-app._cw_merge = _real_merge
+app._cw_merge = _real_merge; app._cw_mr_ready = _real_ready
 check(ADM.get("/api/cowork/settings").get_json()["month_cost"] == 1.75, "расход за месяц сложен по заданиям")
 check(ADM.put("/api/cowork/settings", json={"budget_usd": 1, "model": "claude-haiku-5-5", "max_turns": 10}).get_json()["model"] == "claude-haiku-5-5" and EMP.put("/api/cowork/settings", json={"budget_usd": 0}).status_code == 403, "настройки исполнителя меняет админ")
 ct4 = ok(EMP.post("/api/cowork/tasks", json={"title": "Четвёртое", "spec": {"what": "x"}, "project": "aiva"}), "четвёртое задание")
@@ -295,6 +297,8 @@ check(HEAD.post(f"/api/cowork/tasks/{ct2['id']}/cancel").status_code in (403, 40
 nt = ok(EMP.post(f"/api/cowork/tasks/{ct['id']}/notes", json={"text": "Кнопка не там"}), "замечание к заданию")
 check(bool(nt) and len(EMP.get(f"/api/cowork/tasks/{ct['id']}/notes").get_json()) == 1 and EMP.get("/api/cowork/notes").get_json()[0]["task_title"] == ct["title"], "замечание видно в карточке и во вкладке «Замечания»")
 check(EMP.post(f"/api/cowork/tasks/{ct['id']}/notes", json={"text": ""}).status_code == 400 and BUY.post(f"/api/cowork/tasks/{ct['id']}/notes", json={"text": "x"}).status_code == 403, "пустое замечание и замечание без входа не принимаются")
+check(ADM.post(f"/api/cowork/tasks/{ct['id']}/notes", json={"text": "от админа"}).status_code == 201, "админ пишет замечание к чужому заданию")
+check(EMP.get("/api/cowork/projects").get_json()[0].get("rules") == "" and "has_repo" in EMP.get("/api/cowork/projects").get_json()[0], "сотруднику не отдаются правила и адрес репозитория проекта")
 check(EMP.post("/api/cowork/materials", json={"title": "x"}).status_code == 403, "материалы ведёт только админ")
 mt = ok(ADM.post("/api/cowork/materials", json={"title": "Правила заявок", "body": "Согласование директором", "url": "javascript:alert(1)"}), "админ добавил материал")
 check(bool(mt) and mt["url"] == "" and EMP.get("/api/cowork/materials").get_json()[0]["title"] == "Правила заявок", "вредная ссылка в материале отброшена, вошедший материал видит")

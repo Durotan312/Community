@@ -1268,7 +1268,7 @@ function cwProjectsHtml() {
 function cwProjBadge(p) {
   if (p.ready) return '<span class="req-status done">агент подключён</span>';
   if (p.status !== 'active') return '<span class="req-status cancelled">агент выключен</span>';
-  if (!p.repo || !p.token_set) return '<span class="req-status cw-status queued">нет доступа к коду</span>';
+  if (!p.has_repo || !p.token_set) return '<span class="req-status cw-status queued">нет доступа к коду</span>';
   return '<span class="req-status cancelled">исполнитель не на связи</span>';
 }
 function cwOpenProjectForm(key) {
@@ -5681,7 +5681,10 @@ const fmtUptime = s => { const d = Math.floor(s / 86400), h = Math.floor(s % 864
 const TABLE_NAMES = { agent_runs: 'Запуски агентов', users: 'Учётные записи', requests: 'Заявки', news: 'Новости', comments: 'Комментарии', documents: 'Документы',
   employees: 'Сотрудники', events: 'События календаря', faq: 'Частые вопросы', gallery: 'Ивенты', gallery_photos: 'Фото ивентов',
   partners: 'Партнёры', honors: 'Доска почёта', projects: 'Проекты', suggestions: 'Обращения', about: 'О компании',
-  leaders: 'Руководители', onboarding_steps: 'Шаги для новичков', tasks: 'Задачи' };
+  leaders: 'Руководители', onboarding_steps: 'Шаги для новичков', tasks: 'Задачи', attendance: 'Отметки посещаемости', elpass_cards: 'Карты турникета',
+  english_att: 'Английский: отметки', game_scores: 'Мини-игры: результаты', game_time: 'Мини-игры: время', passes: 'Пропуски', profiles: 'Профили «О себе»',
+  receipts: 'Чеки', resumes: 'Резюме', translations: 'Переводы', vacancies: 'Вакансии', settings: 'Настройки', audit: 'Журнал действий',
+  cowork_tasks: 'WorkFlow: задания', cowork_notes: 'WorkFlow: замечания', cowork_materials: 'WorkFlow: материалы', cowork_projects: 'WorkFlow: проекты', cowork_accounts: 'WorkFlow: учётки' };
 
 // человеческое описание строки журнала
 const AUDIT_WHAT = [[/^\/api\/login$/, 'вход в портал'], [/^\/api\/register$/, 'запрос первого входа'], [/^\/api\/invite\//, 'установка пароля по приглашению'],
@@ -5790,7 +5793,7 @@ async function renderAdminStatus(body) {
       ${card('Версия портала', [
         ['Код', s.version.hash ? `<code>${escapeHtml(s.version.hash)}</code>` : 'неизвестно'],
         ['Выложено', s.version.time ? fmtAstana(s.version.time) : '—'],
-        ['Последнее изменение', escapeHtml((s.version.message || '—').slice(0, 90))],
+        ['Последнее изменение', escapeHtml((s.version.message || '—').slice(0, 90) + ((s.version.message || '').length > 90 ? '…' : ''))],
         ['Работает без перезапуска', fmtUptime(s.uptime_sec)],
         ['Python / Flask', `${escapeHtml(s.python)} / ${escapeHtml(s.flask || '?')}`]])}
       ${card('Люди и доступ', [

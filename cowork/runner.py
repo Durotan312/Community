@@ -109,7 +109,8 @@ class Job:
         if AGENT_USER:
             os.chmod(WORK, 0o711)
         repo = self.project["repo"]
-        code, out = run(["git", "clone", "--quiet", "--branch", self.base, repo, self.dir], WORK, self.git_env(), 600)
+        # core.symlinks=false: ссылка в чужом коде не выведет запись за пределы рабочей копии (Security Engineer 08.10.2026)
+        code, out = run(["git", "-c", "core.symlinks=false", "clone", "--quiet", "--branch", self.base, repo, self.dir], WORK, self.git_env(), 600)
         if code:
             raise RuntimeError("не удалось скачать код: " + out.strip()[-600:])
         # ветка доработки: продолжаем, если она уже есть на сервере
@@ -143,6 +144,8 @@ class Job:
                   "Не переписывай историю git, не меняй настройки выкладки. Пиши комментарии и тексты интерфейса на языке проекта. "
                   "В конце коротко перечисли, что изменил и как это проверить."]
         path = os.path.join(self.dir, "CLAUDE.md")
+        if os.path.islink(path):
+            raise RuntimeError("CLAUDE.md в репозитории — символическая ссылка, так нельзя")
         existed = os.path.exists(path)
         if existed:                                        # свой CLAUDE.md у проекта остаётся, наш — дописывается сверху
             own = open(path, encoding="utf-8", errors="replace").read()
@@ -201,6 +204,8 @@ class Job:
     def hide_hooks(self):
         """Хуки Claude Code из клонированного проекта (.claude/settings*.json) не запускаем: это чужой код."""
         d = os.path.join(self.dir, ".claude")
+        if os.path.islink(d):
+            raise RuntimeError(".claude в репозитории — символическая ссылка, так нельзя")
         if not os.path.isdir(d):
             return None
         aside = os.path.join(WORK, self.task["id"] + ".claude-aside")

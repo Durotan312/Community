@@ -6601,6 +6601,9 @@ def cowork_notes(item_id):
     text = str((request.get_json(silent=True) or {}).get("text") or "").strip()[:2000]
     if not text:
         return jsonify({"error": "Пустое замечание."}), 400
+    trow = db.execute("SELECT author_id FROM cowork_tasks WHERE id=?", (item_id,)).fetchone()
+    if user["role"] != "admin" and trow["author_id"] != user["id"]:    # замечание уходит агенту в промпт — пишут автор и админ (Security Engineer 08.10.2026)
+        return jsonify({"error": "Замечания к заданию пишут его автор и администратор."}), 403
     now = datetime.now().isoformat(timespec="seconds")
     nid = uuid.uuid4().hex
     db.execute("INSERT INTO cowork_notes (id, task_id, author_id, author_name, text, created) VALUES (?,?,?,?,?,?)",
@@ -6638,9 +6641,13 @@ def _cw_repo_ok(url):
 COWORK_PROJECT_FIELDS = ("name", "short", "body", "owner", "repo", "stack", "status", "branch", "token", "rules", "checks", "model")
 
 
-def _cowork_project_json(db, r):
+def _cowork_project_json(db, r, admin=True):
     d = dict(r)
     d["token_set"] = bool(d.pop("token", ""))              # сам токен наружу не отдаём
+    d["has_repo"] = bool(d["repo"])
+    if not admin:                                          # адрес закрытого репозитория, правила и команда проверки — служебное (Security Engineer 08.10.2026)
+        for k in ("repo", "rules", "checks", "branch", "model"):
+            d[k] = ""
     d["tasks"] = db.execute("SELECT COUNT(*) FROM cowork_tasks WHERE project=? AND status NOT IN ('accepted','rejected','cancelled')", (r["key"],)).fetchone()[0]
     d["materials"] = db.execute("SELECT COUNT(*) FROM cowork_materials WHERE project=?", (r["key"],)).fetchone()[0]
     d["ready"] = bool(d["status"] == "active" and d["repo"] and d["token_set"] and _cw_runner_alive())   # агент реально может взять задание
@@ -6853,12 +6860,49 @@ def _cw_git_api(repo, token, method, path, body=None, host_api=None):
         return 0, {"message": str(e)}
 
 
+def _cw_mr_ready(pr, task):
+    """Перед слиянием спрашиваем у GitHub/GitLab состояние merge request: конфликты и красные проверки не сливаем."""
+    if urllib.parse.urlparse(pr["repo"]).netloc == "github.com":
+        code, j = _cw_git_api(pr["repo"], pr["token"], "GET", "/pulls/%s" % task["mr_id"])
+        if code != 200 or not isinstance(j, dict):
+            return "Не удалось узнать состояние pull request (%s)." % (code or "нет связи")
+        if j.get("state") != "open":
+            return "Pull request уже закрыт или влит."
+        if j.get("mergeable") is False:
+            return "В pull request конфликты — отправьте задание на доработку."
+        sha = (j.get("head") or {}).get("sha") or ""
+        code, c = _cw_git_api(pr["repo"], pr["token"], "GET", "/commits/%s/check-runs" % sha) if sha else (200, {})
+        runs = (c or {}).get("check_runs") or [] if isinstance(c, dict) else []
+        bad = [r for r in runs if r.get("conclusion") in ("failure", "cancelled", "timed_out", "action_required")]
+        if bad:
+            return "Проверки в репозитории не прошли: %s." % ", ".join(str(r.get("name") or "")[:40] for r in bad[:3])
+        if any(r.get("status") != "completed" for r in runs):
+            return "Проверки в репозитории ещё идут — подождите минуту."
+        return ""
+    code, j = _cw_git_api(pr["repo"], pr["token"], "GET", "/merge_requests/%s" % task["mr_id"])
+    if code != 200 or not isinstance(j, dict):
+        return "Не удалось узнать состояние merge request (%s)." % (code or "нет связи")
+    if j.get("state") != "opened":
+        return "Merge request уже закрыт или влит."
+    if j.get("has_conflicts"):
+        return "В merge request конфликты — отправьте задание на доработку."
+    pipe = (j.get("head_pipeline") or {}).get("status")
+    if pipe in ("failed", "canceled"):
+        return "Проверки в репозитории не прошли."
+    if pipe in ("running", "pending", "created"):
+        return "Проверки в репозитории ещё идут — подождите минуту."
+    return ""
+
+
 def _cw_merge(pr, task):
     """Слить merge request задания токеном проекта. Возвращает текст ошибки или ''."""
     if not (pr and pr["repo"] and pr["token"] and task["mr_id"]):
         return ""                                            # нечего сливать (ссылку приложили руками) — просто принимаем
     if not str(task["mr_id"]).isdigit() or not _cw_repo_ok(pr["repo"]):
         return "Номер merge request или адрес репозитория не в порядке."
+    err = _cw_mr_ready(pr, task)
+    if err:
+        return err
     if urllib.parse.urlparse(pr["repo"]).netloc == "github.com":
         code, j = _cw_git_api(pr["repo"], pr["token"], "PUT", "/pulls/%s/merge" % task["mr_id"],
                               {"merge_method": "squash", "commit_title": task["title"][:72]})
@@ -6878,7 +6922,7 @@ def cowork_projects():
         return jsonify({"error": "Нет доступа."}), 403
     db = get_db()
     if request.method == "GET":
-        return jsonify([_cowork_project_json(db, r) for r in db.execute("SELECT * FROM cowork_projects ORDER BY sort, name")])
+        return jsonify([_cowork_project_json(db, r, user["role"] == "admin") for r in db.execute("SELECT * FROM cowork_projects ORDER BY sort, name")])
     if user["role"] != "admin":
         return jsonify({"error": "Проекты ведёт администратор."}), 403
     data = request.get_json(silent=True) or {}

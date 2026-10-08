@@ -1508,8 +1508,8 @@ html[data-theme="dark"] .masthead{background:rgba(30,34,39,0.92);}
 .cal-weekdays div{padding:8px 0;text-align:center;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-soft);}
 .cal-weekdays div:nth-child(n+6){color:var(--orange-dark);}
 
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);}
-.cal-cell{
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));}   /* minmax(0): длинная плашка не растягивает колонку (проверка 08.10.2026) */
+.cal-cell{min-width:0;
   min-height:104px;padding:6px 6px 8px;
   border-right:1px solid var(--border);border-bottom:1px solid var(--border);
   cursor:pointer;transition:background .12s;position:relative;
@@ -2773,7 +2773,8 @@ html[data-theme="dark"] .att-code.remote{background:#10323A;color:#7FD4E6;border
 .att-nav{display:flex;align-items:center;gap:8px;}
 .att-nav b{font-family:'Mulish',sans-serif;font-size:17px;min-width:170px;text-align:center;}
 .att-filter{padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--ink);font-size:13.5px;min-width:240px;}
-.att-wrap{overflow:auto;border:1px solid var(--border);border-radius:14px;background:var(--surface);max-height:calc(100vh - 300px);}
+.att-wrap{overflow:auto;border:1px solid var(--border);border-radius:14px;background:var(--surface);max-height:calc(100vh - 300px);scrollbar-width:thin;scrollbar-color:var(--orange) var(--bg-soft);}
+.att-wrap::-webkit-scrollbar{width:10px;height:10px;}.att-wrap::-webkit-scrollbar-thumb{background:var(--orange);border-radius:999px;}.att-wrap::-webkit-scrollbar-track{background:var(--bg-soft);}
 .att-table{border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:100%;}
 .att-table th,.att-table td{border-right:1px solid var(--border);border-bottom:1px solid var(--border);text-align:center;padding:0;height:40px;min-width:34px;position:relative;}
 .att-table thead th{position:sticky;top:0;z-index:2;background:var(--bg-soft);font-weight:700;line-height:1.1;padding:6px 2px;}
@@ -3006,8 +3007,8 @@ html[data-theme="dark"] .seat-tag{background:var(--orange);color:#fff;}
   font-family:'Mulish',sans-serif;font-size:clamp(8px,1.25cqw,13px);font-weight:700;color:#3B342E;white-space:nowrap;
   box-shadow:0 1px 3px rgba(0,0,0,0.08);}
 /* подпись с названием отдела на его схеме — крупно и в фирменном цвете */
-.room-tag.title{background:var(--orange);color:#fff;border-color:var(--orange);font-size:clamp(11px,1.8cqw,18px);letter-spacing:.2px;
-  padding:0.4em 1em;border-radius:999px;box-shadow:0 4px 12px rgba(242,107,29,0.35);}
+.room-tag.title{background:var(--orange);color:#fff;border-color:var(--orange);font-size:clamp(9px,1.8cqw,18px);letter-spacing:.2px;
+  padding:0.4em 1em;border-radius:999px;box-shadow:0 4px 12px rgba(242,107,29,0.35);max-width:min(92%,26em);white-space:normal;text-align:center;line-height:1.15;}
 html[data-theme="dark"] .room-tag.title{background:var(--orange);color:#fff;border-color:var(--orange);}
 .office-plan.editing .room-tag{cursor:pointer;}
 .office-plan.editing .room-tag:hover{background:#C4322A;color:#fff;border-color:#C4322A;}
@@ -3099,7 +3100,7 @@ html[data-theme="dark"] .mgr-hero{background:linear-gradient(135deg,#3A2A1E 0%,#
 .games-status b{font-variant-numeric:tabular-nums;color:var(--orange-dark);}
 .games-status.free{color:#1F6B3A;}
 .games-status.limited{color:var(--orange-dark);}
-.games-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-bottom:26px;}
+.games-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-bottom:26px;}   /* auto-fit: четыре игры в один ряд, без одинокой плитки (08.10.2026) */
 .game-tile{background:var(--surface);border:1px solid var(--border);border-top:4px solid var(--orange);border-radius:14px;padding:16px 18px;cursor:pointer;display:flex;flex-direction:column;gap:4px;}
 .game-tile:hover{border-color:var(--orange);}
 .game-tile.locked{border-top-color:var(--border);opacity:.55;cursor:default;}
@@ -3562,3 +3563,15 @@ body.cw-mode .main{max-width:none;}
 .cw-running{display:flex;align-items:center;gap:8px;}
 .cw-running .ask-dots{display:inline-flex;gap:3px;}
 .emp-profile-row code{background:var(--bg-soft);border-radius:6px;padding:1px 6px;font-size:12.5px;}
+
+/* проверка 08.10.2026: одинокая плитка в последнем ряду растягивается на всю ширину (телефон — две колонки; «Сервисы» — две) */
+@media (max-width:720px){
+  .hr-tiles>:last-child:nth-child(odd){grid-column:1/-1;}
+}
+.adm-grid>.svc-card:last-child:nth-child(odd){grid-column:1/-1;}
+/* проверка 08.10.2026: на телефоне подписи зон карты офиса — компактные, с переносом, не шире половины плана */
+@media (max-width:720px){
+  .room-tag.title,.plan-area span{font-size:8.5px;padding:.3em .7em;max-width:92%;line-height:1.1;box-shadow:none;white-space:normal;text-align:center;}
+}
+/* мини-игры на широком экране — четыре в ряд */
+@media (min-width:1100px){ .games-grid{grid-template-columns:repeat(4,minmax(0,1fr));} }
