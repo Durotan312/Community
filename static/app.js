@@ -1192,7 +1192,7 @@ async function renderCowork(main) {
   else if (tab === 'notes') cwRenderNotesAll();
   else if (tab === 'materials') cwRenderMaterials();
   else if (tab === 'settings') cwRenderSettings();
-  if (!cwOnbDone()) cwOnboarding(0, true);
+  if (!cwOnbDone()) { try { localStorage.setItem('cw_onboarding', 'done'); } catch (e) { /* приватный режим */ } cwOnboarding(0, true); }
 }
 function cwReviewCount() { const n = (cw.tasks || []).filter(t => t.status === 'review').length; return n ? ` <span class="subtab-count">${n}</span>` : ''; }
 function cwOpenTask(id) { state.coworkTab = 'task-' + id; render(); }
@@ -1338,7 +1338,7 @@ async function cwRenderSettings() {
   let html = '';
   if (cur === 'ai') {
     html = block('key', 'Приёмщик заданий', yes(s.ai_key), row('Модель', 'Та же, что у Connect AI') + row('Ключ', 'На сервере портала, в чат не попадает'))
-      + block('activity', 'Исполнитель — правит код', yes(false), row('Где работает', 'GitHub, отдельно от сайта') + row('Что нужно', 'Ключ модели и токен GitHub — вставляет администратор'));
+      + block('activity', 'Исполнитель — правит код', yes(!!s.executor), row('Где работает', 'GitHub, отдельно от сайта') + row('Что нужно', 'Ключ модели и токен GitHub — вставляет администратор'));
   } else if (cur === 'services') {
     html = block('layers', 'Трекеры и базы знаний', '', '<div class="empty"><strong>Ничего не подключено</strong></div>');
   } else if (cur === 'git') {
@@ -1358,6 +1358,7 @@ async function cwRenderSettings() {
 }
 async function cwToggleUser(id, on) {
   const res = await fetchJson('/api/users/' + encodeURIComponent(id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cowork: on }) });
+  cw.settingsAt = 0;   // галочки читать заново, а не из кэша
   showToast(res ? (on ? 'Доступ открыт' : 'Доступ закрыт') : 'Не удалось сохранить');
 }
 
