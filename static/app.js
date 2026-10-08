@@ -13,6 +13,7 @@ const state = {
 // ico('calendar') → инлайн-SVG, размер = font-size родителя, цвет = currentColor.
 // =========================================================
 const ICONS = {
+  code: '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
   shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
   arrowLeft: '<path d="M19 12H5M12 19l-7-7 7-7"/>',
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
