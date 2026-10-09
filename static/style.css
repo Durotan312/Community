@@ -3625,3 +3625,17 @@ html{scrollbar-gutter:stable;}
 .widget-book .book-author{overflow-wrap:break-word;}
 .widget-book.book-row .book-body{min-height:138px;}
 .widget-book.book-row .book-text{min-height:0;flex:1;min-width:0;}
+
+/* история заявки по шагам с точным временем (09.10.2026) */
+.req-log{margin:14px 0 4px;border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:var(--bg-soft);}
+.req-log-title{font-family:'Mulish',sans-serif;font-weight:800;font-size:14px;margin-bottom:8px;}
+.req-log-row{display:flex;gap:12px;align-items:baseline;padding:6px 0;border-top:1px solid var(--border);font-size:13.5px;}
+.req-log-row:first-of-type{border-top:0;}
+.req-log-time{flex:none;width:112px;color:var(--orange-dark);font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.req-log-what{min-width:0;overflow-wrap:anywhere;}
+.req-log-text{color:var(--ink-soft);margin-top:2px;}
+.req-row .req-row-date{white-space:nowrap;}
+.req-detail-top{flex-wrap:wrap;row-gap:6px;}
+.req-detail-top .req-row-date{white-space:normal;min-width:0;}
+@media (max-width:720px){.req-log-row{flex-direction:column;gap:2px;}.req-log-time{width:auto;}}
+@media (max-width:700px){.req-detail-top .req-row-date{display:block;}}   /* в окне заявки дата и время видны и на телефоне (09.10.2026) */

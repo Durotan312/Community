@@ -185,6 +185,25 @@ if tmp:
 HR.put(f"/api/employees/{emp_card['id']}", json={"hired": ""})
 db.execute("DELETE FROM profiles WHERE employee_id=?", (emp_card["id"],)); db.commit()
 
+print("== История заявки с временем (09.10.2026)")
+rl = ok(EMP.post("/api/requests", json={"type": "it", "data": {"full_name": "Шарипов Ануар", "problem": "Не работает принтер, печатает пустые листы"}}), "заявка в поддержку IT подана")
+if rl:
+    check("T" in rl["created"] and [e["event"] for e in rl["log"]] == ["created"] and rl["log"][0]["actor"], "у новой заявки время подачи и первый шаг истории")
+    r2 = ADM.put(f"/api/requests/{rl['id']}", json={"status": "in_progress", "hr_comment": "Смотрю"}).get_json()
+    check([e["event"] for e in r2["log"]] == ["created", "status"] and r2["log"][1]["status"] == "in_progress" and r2["log"][1]["text"] == "Смотрю" and r2["log"][1]["actor"], "взяли в работу — шаг со статусом, комментарием и именем")
+    r3 = ADM.put(f"/api/requests/{rl['id']}", json={"status": "in_progress", "hr_comment": "Заказал картридж"}).get_json()
+    check([e["event"] for e in r3["log"]][-1] == "comment" and len(r3["log"]) == 3, "новый комментарий без смены статуса — отдельный шаг")
+    check(len(ADM.put(f"/api/requests/{rl['id']}", json={"status": "in_progress", "hr_comment": "Заказал картридж"}).get_json()["log"]) == 3, "сохранение без изменений шага не добавляет")
+    r4 = ADM.put(f"/api/requests/{rl['id']}", json={"status": "done"}).get_json()
+    check(r4["log"][-1]["status"] == "done" and all(a["ts"] <= b["ts"] for a, b in zip(r4["log"], r4["log"][1:])), "закрыли — шаг «готово», шаги идут по времени")
+    mine = next(x for x in EMP.get("/api/requests").get_json() if x["id"] == rl["id"])
+    check(len(mine["log"]) == 4 and mine["log"][0]["actor"] and not mine["log"][1]["actor"] and mine["log"][1]["text"] == "Смотрю", "автор видит историю и комментарии, но не имя того, кто ведёт заявку")
+    ok(ADM.delete(f"/api/requests/{rl['id']}"), "заявка удалена")
+    check(db.execute("SELECT COUNT(*) FROM request_log WHERE request_id=?", (rl["id"],)).fetchone()[0] == 0, "вместе с заявкой удалена её история")
+_sh = app._tz_shift_hours
+app._tz_shift_hours = lambda: 5
+check(app._to_astana("2026-10-08T22:30:00") == "2026-10-09T03:30:00" and app._to_astana("") == "" and app._to_astana("2026-10-08") == "2026-10-08", "время сервера переводится во время Астаны, пустое и дата без времени не трогаются")
+app._tz_shift_hours = _sh
 print("== Книги от руководителей (09.10.2026)")
 lid0 = ADM.get("/api/leaders").get_json()[0]["id"]
 bk = ADM.put("/api/hr/book", json={"leader_id": lid0, "title": "Тестовая книга", "author": "Автор", "note": "почему", "cover": "javascript:alert(1)"}).get_json()

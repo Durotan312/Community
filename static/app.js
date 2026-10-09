@@ -168,6 +168,10 @@ function fmtDate(iso) {
   const d = new Date(iso);
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
 }
+// дата со временем (09.10.2026, заявки: «не просто дата, а именно со временем»)
+function fmtTime(iso) { const d = new Date(iso); return isNaN(d) || !String(iso).includes('T') ? '' : d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); }
+function fmtDateTime(iso) { const t = fmtTime(iso); return fmtDate(iso) + (t ? ', ' + t : ''); }
+function fmtShortDateTime(iso) { const t = fmtTime(iso); return fmtShortDate(iso) + (t ? ', ' + t : ''); }
 function fmtShortDate(isoDate) {
   const d = new Date(isoDate);
   if (isNaN(d)) return isoDate;
@@ -5361,7 +5365,7 @@ function requestRowHtml(r, withAuthor) {
         <div class="req-row-sub">${[withAuthor ? r.author_name : '', k.rowSub(d)].filter(Boolean).map(escapeHtml).join(' · ')}</div>
       </div>
       <div class="req-status ${sc}">${sl}</div>
-      <div class="req-row-date">подана ${fmtShortDate(r.created)}${r.done_at ? `<br>${reqDoneWord(r)} ${fmtShortDate(r.done_at)}` : ''}</div>
+      <div class="req-row-date">подана ${fmtShortDateTime(r.created)}${r.done_at ? `<br>${reqDoneWord(r)} ${fmtShortDateTime(r.done_at)}` : ''}</div>
     </div>`;
 }
 // «выплачена 9 окт.» — дата, когда заявку закрыли (06.10.2026, слова пользователя: «даты, когда подана и когда выплачена»)
@@ -5548,17 +5552,18 @@ function openRequest(id) {
         </div>`
       : r.decided_by ? `
         <div class="req-approval ${r.status === 'rejected' && r.approver_comment && !r.hr_comment ? 'no' : 'yes'}">
-          <div><b>${r.status === 'rejected' && !r.hr_comment ? 'Отклонил руководитель' : 'Одобрил руководитель'}:</b> ${escapeHtml(r.decided_by)}${r.decided_at ? ` · ${fmtDate(r.decided_at)}` : ''}</div>
+          <div><b>${r.status === 'rejected' && !r.hr_comment ? 'Отклонил руководитель' : 'Одобрил руководитель'}:</b> ${escapeHtml(r.decided_by)}${r.decided_at ? ` · ${fmtDateTime(r.decided_at)}` : ''}</div>
           ${r.approver_comment ? `<div class="req-approval-note">${escapeHtml(r.approver_comment)}</div>` : ''}
         </div>` : '';
   openModal(`
     <div class="modal req-modal">
       <div class="modal-head"><h3>${k.name} · ${escapeHtml(r.author_name || '')}</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
       <div class="modal-body" id="reqPrintArea" data-title="${escapeHtml(k.formTitle)}">
-        <div class="req-detail-top"><span class="req-status ${sc}">${sl}</span><span class="req-row-date">подана ${fmtDate(r.created)}${r.done_at ? ` · ${reqDoneWord(r)} ${fmtDate(r.done_at)}${r.done_by && (canManageRequest(r) || isCfo()) ? ' — ' + escapeHtml(r.done_by) : ''}` : ''}</span></div>
+        <div class="req-detail-top"><span class="req-status ${sc}">${sl}</span><span class="req-row-date">подана ${fmtDateTime(r.created)}${r.done_at ? ` · ${reqDoneWord(r)} ${fmtDateTime(r.done_at)}${r.done_by && (canManageRequest(r) || isCfo()) ? ' — ' + escapeHtml(r.done_by) : ''}` : ''}</span></div>
         ${approvalHtml}
         ${r.hr_comment ? `<div class="req-comment"><b>Комментарий ${who}:</b> ${escapeHtml(r.hr_comment)}</div>` : ''}
         ${requestDetailHtml(r)}
+        ${reqLogHtml(r, k)}
         ${manage ? `
         <div class="req-staff">
           <div class="field"><label>Статус</label>
@@ -5575,6 +5580,24 @@ function openRequest(id) {
         : manage ? `<button class="btn" onclick="saveRequest('${r.id}')">Сохранить</button>` : `<button class="btn" onclick="closeModal()">Закрыть</button>`}
       </div>
     </div>`);
+}
+
+// история заявки по шагам с точным временем: подана, одобрена, взята в работу, закрыта (09.10.2026)
+function reqLogHtml(r, k) {
+  const log = r.log || [];
+  if (!log.length) return '';
+  const label = e => e.event === 'created' ? 'Подана' : e.event === 'approved' ? 'Одобрил руководитель' : e.event === 'declined' ? 'Отклонил руководитель'
+    : e.event === 'cancelled' ? 'Отменена' : e.event === 'comment' ? 'Комментарий'
+    : 'Статус: ' + (((k || {}).statusLabels || {})[e.status] || (REQ_STATUS[e.status] || [e.status])[0]);
+  return `
+    <div class="req-log no-tr">
+      <div class="req-log-title">История</div>
+      ${log.map(e => `
+        <div class="req-log-row">
+          <span class="req-log-time">${fmtShortDateTime(e.ts)}</span>
+          <div class="req-log-what"><b>${escapeHtml(label(e))}</b>${e.actor ? ' · ' + escapeHtml(e.actor) : ''}${e.text ? `<div class="req-log-text">${escapeHtml(e.text)}</div>` : ''}</div>
+        </div>`).join('')}
+    </div>`;
 }
 
 async function saveRequest(id) {
@@ -5795,7 +5818,7 @@ const TABLE_NAMES = { agent_runs: 'Запуски агентов', users: 'Уч�
   leaders: 'Руководители', onboarding_steps: 'Шаги для новичков', tasks: 'Задачи', attendance: 'Отметки посещаемости', elpass_cards: 'Карты турникета',
   english_att: 'Английский: отметки', game_scores: 'Мини-игры: результаты', game_time: 'Мини-игры: время', passes: 'Пропуски', profiles: 'Профили «О себе»',
   receipts: 'Чеки', resumes: 'Резюме', translations: 'Переводы', vacancies: 'Вакансии', settings: 'Настройки', audit: 'Журнал действий',
-  cowork_tasks: 'WorkFlow: задания', cowork_notes: 'WorkFlow: замечания', cowork_materials: 'WorkFlow: материалы', cowork_projects: 'WorkFlow: проекты', cowork_accounts: 'WorkFlow: учётки' };
+  request_log: 'История заявок', cowork_tasks: 'WorkFlow: задания', cowork_notes: 'WorkFlow: замечания', cowork_materials: 'WorkFlow: материалы', cowork_projects: 'WorkFlow: проекты', cowork_accounts: 'WorkFlow: учётки' };
 
 // человеческое описание строки журнала
 const AUDIT_WHAT = [[/^\/api\/login$/, 'вход в портал'], [/^\/api\/register$/, 'запрос первого входа'], [/^\/api\/invite\//, 'установка пароля по приглашению'],

@@ -151,6 +151,16 @@ SCHEMA = {
         "cowork": "INTEGER NOT NULL DEFAULT 0",   # допуск к Connected WorkFlow (08.10.2026): ставит админ; у admin всегда есть
         "cowork_only": "INTEGER NOT NULL DEFAULT 0",   # отдельная учётка только для WorkFlow (08.10.2026): портал ей закрыт
     },
+    "request_log": {                     # история заявки по шагам с точным временем (09.10.2026)
+        "id": "TEXT PRIMARY KEY",
+        "request_id": "TEXT NOT NULL",
+        "ts": "TEXT NOT NULL",           # часы сервера, как у requests.created; при выдаче переводится во время Астаны
+        "event": "TEXT NOT NULL",        # created / approved / declined / status / comment / cancelled
+        "status": "TEXT",                # новый статус — для события status
+        "actor": "TEXT",                 # кто сделал
+        "staff": "INTEGER NOT NULL DEFAULT 0",   # 1 — шаг того, кто ведёт заявки: его имя автору не показываем (как done_by)
+        "text": "TEXT",                  # комментарий к шагу
+    },
     "cowork_tasks": {                    # Connected WorkFlow (08.10.2026): задания агенту на изменение портала
         "id": "TEXT PRIMARY KEY",
         "author_id": "TEXT NOT NULL",
@@ -1558,12 +1568,66 @@ def _is_staff(user):
     return user["role"] in ("admin", "hr")
 
 
-def _request_json(row):
+# Время заявок (09.10.2026). В базе оно по часам сервера — в контейнере это Гринвич, на 5 часов раньше Астаны.
+# Пока показывали только дату, это было незаметно; со временем на экране — переводим при выдаче, базу не трогаем.
+def _tz_shift_hours():
+    return round((_astana_now() - datetime.now()).total_seconds() / 3600)
+
+
+def _to_astana(ts):
+    h = _tz_shift_hours()
+    if not ts or not h or "T" not in str(ts):
+        return ts
+    try:
+        return (datetime.fromisoformat(ts) + timedelta(hours=h)).isoformat(timespec="seconds")
+    except ValueError:
+        return ts
+
+
+def _req_log(db, request_id, event, actor="", staff=0, status=None, text="", ts=None):
+    """Записать шаг в историю заявки. Коммит делает вызывающий."""
+    db.execute("INSERT INTO request_log (id, request_id, ts, event, status, actor, staff, text) VALUES (?,?,?,?,?,?,?,?)",
+               (uuid.uuid4().hex, request_id, ts or datetime.now().isoformat(timespec="seconds"), event, status, actor or "", 1 if staff else 0, text or ""))
+
+
+def _request_logs(db):
+    out = {}
+    for r in db.execute("SELECT * FROM request_log ORDER BY ts, rowid"):
+        out.setdefault(r["request_id"], []).append(dict(r))
+    return out
+
+
+def _request_timeline(d, stored, user):
+    """История для экрана: записанные шаги; у заявок, поданных до 09.10.2026, начало восстанавливается из полей заявки."""
+    if not any(e["event"] == "created" for e in stored):
+        synth = []
+        if d.get("created"):
+            synth.append({"ts": d["created"], "event": "created", "status": None, "actor": d.get("author_name") or "", "staff": 0, "text": ""})
+        if d.get("decided_at"):
+            declined = d.get("status") == "rejected" and not d.get("hr_comment")
+            synth.append({"ts": d["decided_at"], "event": "declined" if declined else "approved", "status": None,
+                          "actor": d.get("decided_by") or "", "staff": 0, "text": d.get("approver_comment") or ""})
+        if d.get("done_at"):
+            synth.append({"ts": d["done_at"], "event": "status", "status": "done", "actor": d.get("done_by") or "", "staff": 1, "text": ""})
+        first = stored[0]["ts"] if stored else None
+        stored = [e for e in synth if first is None or e["ts"] < first] + stored
+    sees_staff = user is None or _can_manage(user, d["type"]) or d["type"] in REQUEST_VIEW_ROLES.get(user["role"], ())
+    return [{"ts": _to_astana(e["ts"]), "event": e["event"], "status": e.get("status"),
+             "actor": (e.get("actor") or "") if (sees_staff or not e.get("staff")) else "", "text": e.get("text") or ""} for e in stored]
+
+
+def _request_json(row, db=None, user=None, logs=None):
     d = dict(row)
     try:
         d["data"] = json.loads(d.get("data") or "{}")
     except ValueError:
         d["data"] = {}
+    if db is not None:
+        stored = logs.get(d["id"], []) if logs is not None else \
+            [dict(r) for r in db.execute("SELECT * FROM request_log WHERE request_id=? ORDER BY ts, rowid", (d["id"],))]
+        d["log"] = _request_timeline(d, stored, user)
+    for k in ("created", "updated", "decided_at", "done_at"):
+        d[k] = _to_astana(d.get(k))
     return d
 
 
@@ -1589,9 +1653,10 @@ def requests_collection():
                 (user["id"], *managed, me["id"] if me else "-"),
             ).fetchall()
         online = _employees_with_accounts(db)
+        logs = _request_logs(db)
         out = []
         for r in rows:
-            d = _request_json(r)
+            d = _request_json(r, db, user, logs)
             if not _can_manage(user, d["type"]) and d["type"] not in REQUEST_VIEW_ROLES.get(user["role"], ()):
                 d.pop("done_by", None)                # кто закрыл заявку — только тем, кто ведёт или просматривает этот вид
             if d.get("approver_id"):
@@ -1659,10 +1724,12 @@ def requests_collection():
         db.execute("UPDATE receipts SET request_id=? WHERE name=?", (item["id"], receipt_name))
     if resume_name:
         db.execute("UPDATE resumes SET request_id=? WHERE name=?", (item["id"], resume_name))
+    _req_log(db, item["id"], "created", actor=user["name"] or user["login"], ts=now)
     db.commit()
+    out = _request_json(db.execute("SELECT * FROM requests WHERE id=?", (item["id"],)).fetchone(), db, user)
     if head:
-        item["approver_online"] = head["id"] in _employees_with_accounts(db)
-    return jsonify(item), 201
+        out["approver_online"] = head["id"] in _employees_with_accounts(db)
+    return jsonify(out), 201
 
 
 @app.route("/api/requests/<item_id>", methods=["PUT", "DELETE"])
@@ -1677,6 +1744,7 @@ def request_item(item_id):
         if row["status"] == "approval" and current_user()["role"] != "admin":
             return jsonify({"error": "Заявка ещё ждёт одобрения руководителя — удалить её можно после согласования."}), 400
         db.execute("DELETE FROM requests WHERE id=?", (item_id,))
+        db.execute("DELETE FROM request_log WHERE request_id=?", (item_id,))
         db.commit()
         # вместе с заявкой уходит и файл чека — по записи о загрузке, а не по адресу из заявки (чужой файл так не стереть)
         for r in db.execute("SELECT name FROM receipts WHERE request_id=?", (item_id,)).fetchall():
@@ -1706,8 +1774,14 @@ def request_item(item_id):
         done_at, done_by = None, None
     db.execute("UPDATE requests SET status=?, hr_comment=?, updated=?, done_at=?, done_by=? WHERE id=?",
                (status, comment, now, done_at, done_by, item_id))
+    # история: смена статуса (с комментарием, если он тоже изменился) или отдельно новый комментарий
+    new_comment = comment if comment != (row["hr_comment"] or "") else ""
+    if status != row["status"]:
+        _req_log(db, item_id, "status", actor=me["name"] or me["login"], staff=1, status=status, text=new_comment, ts=now)
+    elif new_comment:
+        _req_log(db, item_id, "comment", actor=me["name"] or me["login"], staff=1, text=new_comment, ts=now)
     db.commit()
-    return jsonify(_request_json(db.execute("SELECT * FROM requests WHERE id=?", (item_id,)).fetchone()))
+    return jsonify(_request_json(db.execute("SELECT * FROM requests WHERE id=?", (item_id,)).fetchone(), db, me))
 
 
 @app.route("/api/requests/<item_id>/cancel", methods=["POST"])
@@ -1720,10 +1794,11 @@ def request_cancel(item_id):
         return jsonify({"error": "Заявка не найдена."}), 404
     if row["status"] not in ("new", "approval"):
         return jsonify({"error": "Заявку уже взяли в работу — для отмены напишите ответственному."}), 400
-    db.execute("UPDATE requests SET status='cancelled', updated=? WHERE id=?",
-               (datetime.now().isoformat(timespec="seconds"), item_id))
+    now = datetime.now().isoformat(timespec="seconds")
+    db.execute("UPDATE requests SET status='cancelled', updated=? WHERE id=?", (now, item_id))
+    _req_log(db, item_id, "cancelled", actor=user["name"] or user["login"], staff=0 if row["user_id"] == user["id"] else 1, ts=now)
     db.commit()
-    return jsonify(_request_json(db.execute("SELECT * FROM requests WHERE id=?", (item_id,)).fetchone()))
+    return jsonify(_request_json(db.execute("SELECT * FROM requests WHERE id=?", (item_id,)).fetchone(), db, user))
 
 
 @app.route("/api/requests/<item_id>/approve", methods=["POST"])
@@ -1749,8 +1824,9 @@ def request_approve(item_id):
     now = datetime.now().isoformat(timespec="seconds")
     db.execute("UPDATE requests SET status=?, decided_by=?, decided_at=?, approver_comment=?, updated=? WHERE id=?",
                ("new" if decision == "approve" else "rejected", who, now, comment, now, item_id))
+    _req_log(db, item_id, "approved" if decision == "approve" else "declined", actor=who, text=comment, ts=now)
     db.commit()
-    d = _request_json(db.execute("SELECT * FROM requests WHERE id=?", (item_id,)).fetchone())
+    d = _request_json(db.execute("SELECT * FROM requests WHERE id=?", (item_id,)).fetchone(), db, user)
     return jsonify(d)
 
 
