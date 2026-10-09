@@ -3596,3 +3596,19 @@ body.cw-mode .main{max-width:none;}
 /* полоса «Вы смотрите портал как сотрудник» (08.10.2026) */
 .view-as-bar{display:flex;align-items:center;justify-content:center;gap:14px;padding:8px 16px;background:var(--orange-tint);color:var(--orange-dark);font-weight:600;font-size:14px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
 .view-as-bar .btn{padding:6px 12px;font-size:13px;}
+
+/* книги от руководителей (09.10.2026): кто советует, стрелки и точки */
+.book-by{font-size:12.5px;font-weight:700;color:var(--orange-dark);margin:-4px 0 8px;}
+.book-by-full{font-weight:400;color:var(--ink-soft);}
+.book-nav{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px;}
+.book-arrow{width:30px;height:30px;border-radius:50%;border:1px solid var(--border);background:var(--surface);color:var(--orange);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;}
+.book-arrow svg{width:16px;height:16px;}
+.book-arrow:last-child svg{transform:rotate(180deg);}
+.book-arrow:hover{border-color:var(--orange);background:var(--orange-tint);}
+.book-dots{display:flex;gap:5px;}
+.book-dots i{width:6px;height:6px;border-radius:50%;background:var(--border);display:block;}
+.book-dots i.on{background:var(--orange);}
+.book-cover-empty{display:flex;align-items:center;justify-content:center;background:var(--orange-tint);color:var(--orange-dark);font-family:'Mulish',sans-serif;font-weight:800;font-size:15px;text-align:center;padding:14px;}
+.widget-book.book-row .book-cover-empty{width:92px;height:138px;font-size:12px;padding:8px;}
+.people-leaders .leader-excerpt{font-size:13px;color:var(--ink-soft);line-height:1.45;}
+.people-leaders-head{margin-top:4px;}

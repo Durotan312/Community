@@ -250,7 +250,7 @@ async function loadAll() {
   state.onboarding = onboarding || [];
   state.requests = requests || [];
   state.announcement = announcement || {};
-  state.book = book || {};
+  state.books = Array.isArray(book) ? book : [];   // книги руководителей (09.10.2026), листаются в виджете
   state.welcomeVideo = welcomeVideo || {};
   state._liveSig = liveSignature(state.requests, state.suggestions);
   updateRequestsBadge();
@@ -616,33 +616,45 @@ function inboxWidgetHtml() {
 
 // «Книга месяца от CEO» — в правой колонке под «Моими заявками» на всех страницах (24.09.2026: сначала только на главной, потом пользователь решил — везде).
 // Ставят HR и админ (/api/hr/book), хранится одной записью в settings, как объявление.
+// 09.10.2026: книги от всех руководителей, листаются стрелками (слова пользователя: «не только от CEO, но и от директоров,
+// чтобы можно было листать и смотреть, какой директор какую книгу советует»). Текущая — state.bookIdx.
+function curBook() { const list = state.books || []; if (!list.length) return null; state.bookIdx = ((state.bookIdx || 0) % list.length + list.length) % list.length; return list[state.bookIdx]; }
+function bookShift(d) { state.bookIdx = (state.bookIdx || 0) + d; render(); }
+function bookByLine(b) { return `Советует ${escapeHtml((b.by || '').split(' ').slice(-1)[0] || b.by || '')}${b.by_position ? ' · ' + escapeHtml(b.by_position.split(' — ')[0].split(' / ')[0]) : ''}`; }
 function bookWidgetHtml() {
-  const b = state.book || {};
-  if (!b.title) return isStaff() ? `
+  const b = curBook();
+  if (!b) return isStaff() ? `
     <div class="widget-card widget-book">
-      <div class="widget-title">Книга месяца от CEO</div>
+      <div class="widget-title">Книга месяца</div>
       <button class="btn secondary" onclick="openBookForm()">Добавить книгу</button>
     </div>` : '';
+  const n = state.books.length;
   return `
     <div class="widget-card widget-book clickable" onclick="openBookCard()" role="button" title="Открыть карточку книги">
-      <div class="widget-title">Книга месяца от CEO<a class="book-edit" href="#" onclick="event.stopPropagation();openBookForm();return false;">Изменить</a></div>
+      <div class="widget-title">Книга месяца<a class="book-edit" href="#" onclick="event.stopPropagation();openBookForm();return false;">Изменить</a></div>
+      <div class="book-by no-tr">${bookByLine(b)}</div>
       <div class="book-body">
-        ${b.cover ? `<img class="book-cover" src="${escapeHtml(b.cover)}" alt="${escapeHtml(b.title)}">` : ''}
+        ${b.cover ? `<img class="book-cover" src="${escapeHtml(b.cover)}" alt="${escapeHtml(b.title)}">` : `<div class="book-cover book-cover-empty"><span>${escapeHtml(b.title)}</span></div>`}
         <div class="book-text">
           <div class="book-title book-link">${escapeHtml(b.title)}</div>
           ${b.author ? `<div class="book-author">${escapeHtml(b.author)}</div>` : ''}
         </div>
       </div>
+      ${n > 1 ? `<div class="book-nav" onclick="event.stopPropagation()">
+        <button class="book-arrow" onclick="bookShift(-1)" aria-label="Предыдущая книга">${ico('arrowLeft')}</button>
+        <span class="book-dots">${state.books.map((_, i) => `<i class="${i === state.bookIdx ? 'on' : ''}"></i>`).join('')}</span>
+        <button class="book-arrow" onclick="bookShift(1)" aria-label="Следующая книга">${ico('arrowLeft')}</button>
+      </div>` : ''}
     </div>`;
 }
 // карточка книги: почему CEO советует и как получить coins за прочтение (25.09.2026)
 function openBookCard() {
-  const b = state.book || {};
-  if (!b.title) return;
+  const b = curBook();
+  if (!b) return;
   openModal(`
     <div class="modal lp-modal book-modal">
       <div class="modal-head">
-        <div class="lp-head"><span class="lp-ico">${ico('book')}</span><h3>Книга месяца от CEO</h3></div>
+        <div class="lp-head"><span class="lp-ico">${ico('book')}</span><h3>Книга месяца</h3></div>
         <button class="modal-close" onclick="closeModal()">&times;</button>
       </div>
       <div class="modal-body">
@@ -653,7 +665,8 @@ function openBookCard() {
             ${b.author ? `<div class="book-author">${escapeHtml(b.author)}</div>` : ''}
           </div>
         </div>
-        ${b.note ? `<div class="lp-label">Почему CEO советует эту книгу</div><div class="lp-text book-why">${escapeHtml(b.note)}</div>` : ''}
+        <div class="book-by no-tr">${bookByLine(b)}${b.by_position ? ` <span class="book-by-full">(${escapeHtml(b.by)}, ${escapeHtml(b.by_position)})</span>` : ''}</div>
+        ${b.note ? `<div class="lp-label">Почему советует</div><div class="lp-text book-why">${escapeHtml(b.note)}</div>` : ''}
         <div class="lp-event">
           <div class="lp-event-title">Прочитайте и получите 100 Community Coins</div>
           <div class="lp-text">Прочитайте книгу месяца и сдайте короткий тест по ней — за это начисляется 100 Community Coins по программе лояльности.</div>
@@ -690,22 +703,25 @@ function fitBookCover() {
 }
 window.addEventListener('resize', () => { clearTimeout(fitBookCover._t); fitBookCover._t = setTimeout(fitBookCover, 150); });
 
-function openBookForm() {
-  const b = state.book || {};
+function openBookForm(leaderId) {
+  const cur = curBook();
+  const lid = leaderId || (cur && cur.leader_id) || ((state.leaders || [])[0] || {}).id || '';
+  const b = (state.books || []).find(x => x.leader_id === lid) || {};
   openModal(`
     <div class="modal">
-      <div class="modal-head"><h3>Книга месяца от CEO</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
+      <div class="modal-head"><h3>Книга от руководителя</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
       <div class="modal-body">
+        <div class="field"><label>Кто советует</label><select id="fBookLeader" onchange="closeModal();openBookForm(this.value)">${(state.leaders || []).map(l => `<option value="${escapeHtml(l.id)}"${l.id === lid ? ' selected' : ''}>${escapeHtml(l.name)}${l.position ? ' — ' + escapeHtml(l.position) : ''}${l.book_title ? ' · есть книга' : ''}</option>`).join('')}</select></div>
         <div class="field"><label>Название</label><input id="fBookTitle" type="text" value="${escapeHtml(b.title || '')}"></div>
         <div class="field"><label>Автор</label><input id="fBookAuthor" type="text" value="${escapeHtml(b.author || '')}"></div>
-        <div class="field"><label>Почему CEO советует эту книгу</label><textarea id="fBookNote">${escapeHtml(b.note || '')}</textarea></div>
+        <div class="field"><label>Почему советует эту книгу</label><textarea id="fBookNote">${escapeHtml(b.note || '')}</textarea></div>
         <div class="field"><label>Обложка</label>
           <input id="fBookCover" type="file" accept="image/*" onchange="previewImage(this,'bookPreview')">
           <img id="bookPreview" class="preview-thumb" ${b.cover ? `src="${escapeHtml(b.cover)}"` : 'style="display:none;"'}>
         </div>
       </div>
       <div class="modal-foot">
-        ${b.title ? '<button class="btn text" onclick="removeBook()">Снять книгу</button>' : ''}
+        ${b.title ? `<button class="btn text" onclick="removeBook(${jsArg(lid)})">Снять книгу</button>` : ''}
         <button class="btn secondary" onclick="closeModal()">Отмена</button>
         <button class="btn" id="bookSave" onclick="saveBook()">Сохранить</button>
       </div>
@@ -716,19 +732,20 @@ async function saveBook() {
   if (!title) return showToast('Укажите название книги');
   const btn = document.getElementById('bookSave'); btn.disabled = true;
   const input = document.getElementById('fBookCover');
-  let cover = (state.book || {}).cover || '';
+  const lid = document.getElementById('fBookLeader').value;
+  let cover = ((state.books || []).find(x => x.leader_id === lid) || {}).cover || '';
   if (input.files[0]) cover = await uploadFile(input) || cover;
   const r = await fetch('/api/hr/book', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, author: document.getElementById('fBookAuthor').value.trim(),
+    body: JSON.stringify({ leader_id: lid, title, author: document.getElementById('fBookAuthor').value.trim(),
       note: document.getElementById('fBookNote').value.trim(), cover }) });
   const res = await r.json().catch(() => ({}));
   if (!r.ok) { btn.disabled = false; return showToast(res.error || 'Не удалось сохранить'); }
-  state.book = res; closeModal(); render(); showToast('Книга месяца обновлена');
+  state.books = res; state.bookIdx = Math.max(0, res.findIndex(x => x.leader_id === lid)); closeModal(); render(); showToast('Книга обновлена');
 }
-async function removeBook() {
-  const r = await fetch('/api/hr/book', { method: 'DELETE' });
+async function removeBook(lid) {
+  const r = await fetch('/api/hr/book', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leader_id: lid }) });
   if (!r.ok) return showToast('Не удалось снять книгу');
-  state.book = {}; closeModal(); render();
+  state.books = await r.json().catch(() => []); state.bookIdx = 0; closeModal(); render();
 }
 
 // «Мои заявки» в правой колонке — только то, что ещё в пути. Выполненная (выплачено, выдано, готово) и отменённая
@@ -2244,6 +2261,19 @@ function renderPeople(main) {
     return;
   }
 
+  // 09.10.2026, слова пользователя: «на вкладке „Все сотрудники“ хочу, чтобы сначала показывали руководителей с их текстами»
+  const leaders = state.search ? [] : (state.leaders || []).slice().sort((a, b) => (a.sort || 0) - (b.sort || 0));
+  if (leaders.length) {
+    html += `<div class="section-head people-leaders-head"><div><div class="section-title" style="font-size:20px;">Руководители</div></div></div>
+    <div class="people-grid people-leaders">` + leaders.map(l => `
+      <div class="person-card clickable leader-card" onclick="openLeaderCard('${l.id}')" role="button">
+        ${l.photo ? `<img class="person-photo" src="${escapeHtml(l.photo)}" alt="">` : `<div class="person-photo-fallback">${initials(l.name)}</div>`}
+        <div class="person-name">${escapeHtml(l.name)}</div>
+        <div class="person-role">${escapeHtml(l.position || '')}</div>
+        ${l.story ? `<div class="person-extra leader-excerpt">${escapeHtml(l.story.split(/\n/)[0].slice(0, 140))}${l.story.length > 140 ? '…' : ''}</div><div class="leader-more">Читать →</div>` : ''}
+      </div>`).join('') + `</div>
+    <div class="section-head"><div><div class="section-title" style="font-size:20px;">Все сотрудники</div></div></div>`;
+  }
   const NO_DEP = 'Без отдела';
   const groups = {};
   items.forEach(p => { (groups[p.department || NO_DEP] ||= []).push(p); });

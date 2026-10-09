@@ -388,6 +388,11 @@ SCHEMA = {
         "photo": "TEXT",
         "bio": "TEXT",
         "email": "TEXT",
+        "book_title": "TEXT NOT NULL DEFAULT ''",    # книга от руководителя (09.10.2026): «не только от CEO, но и от директоров»
+        "book_author": "TEXT NOT NULL DEFAULT ''",
+        "book_note": "TEXT NOT NULL DEFAULT ''",     # почему советует
+        "book_cover": "TEXT NOT NULL DEFAULT ''",
+        "sort": "INTEGER NOT NULL DEFAULT 0",        # порядок: CEO первым
         "story": "TEXT",   # рассказ от первого лица — открывается по клику на карточку (23.09.2026)
     },
     "elpass_cards": {                    # справочник карточек elpass (el_tcards) — чтобы HR сопоставляла сотрудников из списка
@@ -4756,40 +4761,45 @@ def announcement_set():
 
 
 # ---------- книга месяца от CEO (главная, под «Моими заявками»; 24.09.2026) ----------
+def _books():
+    """Книги от руководителей (09.10.2026, слова пользователя: «не только от CEO, но и от директоров, чтобы можно было листать»):
+    по одной на руководителя, в таблице leaders; первым — по полю sort (CEO)."""
+    rows = get_db().execute("SELECT id, name, position, photo, book_title, book_author, book_note, book_cover FROM leaders "
+                            "WHERE book_title<>'' ORDER BY sort, rowid").fetchall()
+    return [{"leader_id": r["id"], "by": r["name"], "by_position": r["position"] or "", "by_photo": r["photo"] or "",
+             "title": r["book_title"], "author": r["book_author"], "note": r["book_note"], "cover": r["book_cover"]} for r in rows]
+
+
 def _current_book():
-    try:
-        return json.loads(_setting("book_of_month") or "{}") or {}
-    except ValueError:
-        return {}
+    """Первая книга (CEO) — для старых мест, где нужна одна."""
+    b = _books()
+    return b[0] if b else {}
 
 
 @app.route("/api/book", methods=["GET"])
 def book_get():
-    """Книгу месяца видят все вошедшие."""
-    return jsonify(_current_book())
+    """Книги руководителей видят все вошедшие."""
+    return jsonify(_books())
 
 
 @app.route("/api/hr/book", methods=["PUT", "DELETE"])
 def book_set():
-    """Поставить или снять книгу месяца — HR и админ (префикс /api/hr/ закрыт для остальных)."""
-    if request.method == "DELETE":
-        _set_setting("book_of_month", "")
-        return jsonify({})
+    """Поставить или снять книгу руководителя — HR и админ (префикс /api/hr/ закрыт для остальных). В запросе leader_id."""
     data = request.get_json(silent=True) or {}
+    db = get_db()
+    lid = str(data.get("leader_id") or "")
+    if db.execute("SELECT 1 FROM leaders WHERE id=?", (lid,)).fetchone() is None:
+        return jsonify({"error": "Руководитель не найден."}), 404
+    if request.method == "DELETE":
+        db.execute("UPDATE leaders SET book_title='', book_author='', book_note='', book_cover='' WHERE id=?", (lid,)); db.commit()
+        return jsonify(_books())
     title = (data.get("title") or "").strip()
     if not title:
         return jsonify({"error": "Укажите название книги."}), 400
-    user = current_user()
-    b = {
-        "title": title[:200],
-        "author": (data.get("author") or "").strip()[:200],
-        "note": (data.get("note") or "").strip()[:1500],
-        "cover": _clean_url(data.get("cover")),
-        "by": user["name"] or user["login"],
-        "updated": datetime.now().isoformat(timespec="seconds"),
-    }
-    _set_setting("book_of_month", json.dumps(b, ensure_ascii=False))
-    return jsonify(b)
+    db.execute("UPDATE leaders SET book_title=?, book_author=?, book_note=?, book_cover=? WHERE id=?",
+               (title[:200], (data.get("author") or "").strip()[:200], (data.get("note") or "").strip()[:1500], _clean_url(data.get("cover")), lid))
+    db.commit()
+    return jsonify(_books())
 
 
 # ---------- опоздания: проходы elpass × график × отметки табеля ----------
@@ -7133,9 +7143,14 @@ def leaders_item(item_id):
             return jsonify({"error": "not found"}), 404
         data = request.get_json(force=True) or {}
         updates = {}
-        for f in ("name", "position", "photo", "bio", "email", "story"):
+        for f in ("name", "position", "photo", "bio", "email", "story", "book_title", "book_author", "book_note", "book_cover"):
             if f in data:
-                updates[f] = _clean_url(data[f]) if f == "photo" else (data[f] or "").strip()
+                updates[f] = _clean_url(data[f]) if f in ("photo", "book_cover") else (data[f] or "").strip()
+        if "sort" in data:
+            try:
+                updates["sort"] = int(data["sort"])
+            except (TypeError, ValueError):
+                pass
         if "name" in updates and not updates["name"]:
             return jsonify({"error": "name is required"}), 400
         if updates:
@@ -7430,11 +7445,11 @@ def build_knowledge_base(db):
                      + "\nДни занятий: " + ", ".join(wd[i] for i in _english_days())
                      + ". Посещение отмечают сами в разделе «Посещаемость» → вкладка «Английский язык».")
 
-    book = _current_book()
-    if book.get("title"):
-        parts.append("=== КНИГА МЕСЯЦА ОТ CEO (главная страница, справа) ===\n"
-                     + " — ".join(filter(None, [f"«{book['title']}»", book.get("author")]))
-                     + (f"\nПочему советует CEO: {book['note']}" if book.get("note") else "")
+    books = _books()
+    if books:
+        parts.append("=== КНИГИ ОТ РУКОВОДИТЕЛЕЙ (блок «Книга месяца» справа на всех страницах, листается стрелками) ===\n"
+                     + "\n".join(" — ".join(filter(None, [f"«{b['title']}»", b.get("author")])) + f" — советует {b['by']}" + (f" ({b['by_position']})" if b.get("by_position") else "")
+                                 + (f". Почему: {b['note']}" if b.get("note") else "") for b in books)
                      + "\nКарточка книги открывается по клику на неё. Кто прочитает книгу и сдаст тест по ней — получает 100 Community Coins.")
 
     leaders = db.execute("SELECT * FROM leaders").fetchall()
@@ -7656,8 +7671,7 @@ def _prewarm_texts(db):
             texts += q(sql)
         except sqlite3.Error:
             pass
-    b = _current_book()
-    texts.append(b.get("title") or "")
+    texts += [b.get("title") or "" for b in _books()]
     cyr = re.compile(r"[А-Яа-яЁё]")
     return [t.strip() for t in dict.fromkeys(texts) if t and cyr.search(t) and len(t.strip()) <= 3000]
 

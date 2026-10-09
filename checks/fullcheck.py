@@ -185,6 +185,14 @@ if tmp:
 HR.put(f"/api/employees/{emp_card['id']}", json={"hired": ""})
 db.execute("DELETE FROM profiles WHERE employee_id=?", (emp_card["id"],)); db.commit()
 
+print("== Книги от руководителей (09.10.2026)")
+lid0 = ADM.get("/api/leaders").get_json()[0]["id"]
+bk = ADM.put("/api/hr/book", json={"leader_id": lid0, "title": "Тестовая книга", "author": "Автор", "note": "почему", "cover": "javascript:alert(1)"}).get_json()
+check(isinstance(bk, list) and any(b["leader_id"] == lid0 and b["title"] == "Тестовая книга" and b["cover"] == "" and b["by"] for b in bk), "книга привязана к руководителю, вредная обложка отброшена")
+check(any(b["leader_id"] == lid0 for b in EMP.get("/api/book").get_json()), "сотрудник видит список книг руководителей")
+check(EMP.put("/api/hr/book", json={"leader_id": lid0, "title": "x"}).status_code == 403, "книгу ставят только HR и админ")
+check(ADM.put("/api/hr/book", json={"leader_id": "nope", "title": "x"}).status_code == 404 and ADM.put("/api/hr/book", json={"leader_id": lid0, "title": ""}).status_code == 400, "без руководителя или названия — отказ")
+check(not any(b["leader_id"] == lid0 for b in ADM.delete("/api/hr/book", json={"leader_id": lid0}).get_json()), "книга снята")
 print("== Смотреть как сотрудник (08.10.2026)")
 check(EMP.post("/api/me/view-as", json={"on": True}).status_code == 403, "режим «как сотрудник» — только админу")
 va = ADM.post("/api/me/view-as", json={"on": True}).get_json()
