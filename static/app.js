@@ -2306,7 +2306,7 @@ function renderPeople(main) {
         ${l.photo ? `<img class="person-photo" src="${escapeHtml(l.photo)}" alt="">` : `<div class="person-photo-fallback">${initials(l.name)}</div>`}
         <div class="person-name">${escapeHtml(l.name)}</div>
         <div class="person-role">${escapeHtml(l.position || '')}</div>
-        ${l.story ? `<div class="person-extra leader-excerpt">${escapeHtml(l.story.split(/\n/)[0].slice(0, 140))}${l.story.length > 140 ? '…' : ''}</div><div class="leader-more">Читать →</div>` : ''}
+        ${l.story ? `<div class="person-extra leader-excerpt">${escapeHtml(l.story.replace(/\s*\n+\s*/g, ' ').slice(0, 140))}${l.story.length > 140 ? '…' : ''}</div><div class="leader-more">Читать →</div>` : ''}
       </div>`).join('') + `</div>
     <div class="section-head"><div><div class="section-title" style="font-size:20px;">Все сотрудники</div></div></div>`;
   }
@@ -2347,7 +2347,7 @@ function renderPeople(main) {
             ${fieldworkBadge(p.fieldwork)}
             ${p.phone ? `<div class="person-extra">${escapeHtml(p.phone)}</div>` : ''}
             ${p.birthday ? `<div class="person-extra">${ico('cake')} ${fmtShortDate(p.birthday)}</div>` : ''}
-            ${p.email ? `<a class="person-email" href="mailto:${escapeHtml(p.email)}" onclick="event.stopPropagation()">${escapeHtml(p.email)}</a>` : ''}
+            ${p.email ? `<a class="person-email" href="mailto:${escapeHtml(p.email)}" onclick="event.stopPropagation()">${escapeHtml(p.email).replace('@', '<wbr>@')}</a>` : ''}
             ${p.telegram ? `<a class="person-email tg-link" href="https://t.me/${escapeHtml(p.telegram)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Написать в Telegram">@${escapeHtml(p.telegram)}</a>` : ''}
             <div class="card-actions">
               <button class="btn text" onclick="event.stopPropagation();deleteItem('employees','${p.id}')">Удалить</button>
@@ -5890,7 +5890,7 @@ const TABLE_NAMES = { agent_runs: 'Запуски агентов', users: 'Уч�
   request_log: 'История заявок', vacation_balance: 'Остатки отпусков', cowork_tasks: 'WorkFlow: задания', cowork_notes: 'WorkFlow: замечания', cowork_materials: 'WorkFlow: материалы', cowork_projects: 'WorkFlow: проекты', cowork_accounts: 'WorkFlow: учётки' };
 
 // человеческое описание строки журнала
-const AUDIT_WHAT = [[/^\/api\/login$/, 'вход в портал'], [/^\/api\/register$/, 'запрос первого входа'], [/^\/api\/invite\//, 'установка пароля по приглашению'],
+const AUDIT_WHAT = [[/^\/api\/me\/view-as$/, 'просмотр «как сотрудник»: включение или выключение'], [/^\/api\/login$/, 'вход в портал'], [/^\/api\/register$/, 'запрос первого входа'], [/^\/api\/invite\//, 'установка пароля по приглашению'],
   [/^\/api\/me\/password$/, 'смена своего пароля'], [/^\/api\/users\/register-code$/, 'код доступа'], [/^\/api\/users/, 'учётную запись'],
   [/^\/api\/hr\/invite$/, 'приглашение сотруднику'], [/^\/api\/hr\/announcement$/, 'объявление на главной'], [/^\/api\/admin\/backups/, 'копию базы'],
   [/^\/api\/admin\/test-mail$/, 'проверочное письмо'], [/^\/api\/requests\/.+\/cancel$/, 'отмена заявки'], [/^\/api\/requests/, 'заявку'],
@@ -5900,7 +5900,7 @@ const AUDIT_WHAT = [[/^\/api\/login$/, 'вход в портал'], [/^\/api\/re
   [/^\/api\/honors/, 'запись доски почёта'], [/^\/api\/faq/, 'вопрос-ответ'], [/^\/api\/onboarding/, 'шаг для новичков'], [/^\/api\/tasks/, 'задача'], [/^\/api\/hr\//, 'Панель HR'], [/^\/api\/admin\//, 'панель администратора']];
 function auditText(a) {
   const what = (AUDIT_WHAT.find(([re]) => re.test(a.path)) || [0, a.path])[1];
-  const standalone = /вход|запрос|установка|смена|отмена|закрепление|загрузка|приглашение|проверочное/.test(what);
+  const standalone = /вход|запрос|установка|смена|отмена|закрепление|загрузка|приглашение|проверочное|просмотр/.test(what);
   if (a.status === 401 && a.path === '/api/login') return 'неудачный вход — неверный пароль';
   if (a.status === 429) return 'слишком много попыток — ' + what;
   if (a.status === 401) return 'нет входа — попытка: ' + what;
@@ -5991,7 +5991,7 @@ async function renderAdminStatus(body) {
   // копия делается раз в неделю — «устарела», если старше 8 дней
   const lastAgeH = last ? (Date.now() - new Date(last.time + 'Z').getTime()) / 3600000 : null;
   const ok = (good, text) => `<span class="adm-flag ${good ? 'ok' : 'bad'}">${text}</span>`;
-  const card = (title, rows) => `<div class="adm-card"><div class="adm-card-title">${title}</div>${rows.map(([k, v]) => `<div class="adm-row"><span>${k}</span><b>${v}</b></div>`).join('')}</div>`;
+  const card = (title, rows) => `<div class="adm-card"><div class="adm-card-title">${title}</div>${rows.map(([k, v]) => `<div class="adm-row${String(v).replace(/<[^>]+>/g, '').length > 44 ? ' long' : ''}"><span>${k}</span><b>${v}</b></div>`).join('')}</div>`;
   body.innerHTML = `
     <div class="adm-grid">
       ${card('Версия портала', [
@@ -6014,8 +6014,7 @@ async function renderAdminStatus(body) {
       ${card('Сервисы', [
         ['Почта', s.mail.configured ? ok(true, 'настроена · ' + escapeHtml(s.mail.from)) : ok(false, 'не настроена — письма не уходят')],
         ['Connect AI', s.ai.key ? ok(true, 'ключ на месте') : ok(false, 'нет ключа — бот не отвечает')],
-        ['Лимит вопросов боту', `${s.ai.per_hour} в час на человека`],
-        ['Модели по порядку', `<span class="adm-small">${s.ai.models.map(escapeHtml).join(' → ')}</span>`]])}
+        ['Лимит вопросов боту', `${s.ai.per_hour} в час на человека`]])}
     </div>
 
     <div class="adm-card adm-wide">
@@ -6058,7 +6057,7 @@ async function renderAdminServices(body) {
             <div class="adm-card-title">${escapeHtml(s.title)}</div>
             <span class="adm-flag ${SVC_FLAG[s.state] || ''}">${escapeHtml(s.status)}</span>
           </div>
-          ${s.rows.map(([k, v]) => `<div class="adm-row"><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join('')}
+          ${s.rows.map(([k, v]) => `<div class="adm-row${String(v).length > 44 ? ' long' : ''}"><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join('')}
           ${s.check ? `<button class="btn secondary svc-check" onclick="adminSvcCheck(${jsArg(s.key)}, this)">Проверить сейчас</button>` : ''}
         </div>`).join('')}
     </div>
@@ -6422,7 +6421,7 @@ async function adminDeleteBackup(name) {
 function openHr(tab) { state.hrTab = (tab === 'attendance' || tab === 'late') ? 'requests' : (tab || 'requests'); goToView('hr'); }
 
 // чего не хватает в карточке сотрудника
-const HR_GAPS = [['phone', 'телефон'], ['email', 'почта'], ['telegram', 'telegram'], ['birthday', 'день рождения'], ['photo', 'фото']];
+const HR_GAPS = [['phone', 'телефон'], ['email', 'почта'], ['telegram', 'Telegram'], ['birthday', 'день рождения'], ['photo', 'фото']];
 function employeeGaps(e) { return HR_GAPS.filter(([k]) => !e[k]).map(([, label]) => label); }
 
 // Google-таблица HR как временный источник отметок: состояние и кнопка
@@ -7679,6 +7678,8 @@ function updateThemeBtn(dark) {
 function updateViewAsBtn() {
   const bar = document.getElementById('viewAsBar');
   if (bar) bar.hidden = !(state.user && state.user.view_as);
+  // высота полосы нужна чату: он занимает экран целиком, и без неё поле ввода уезжало под край (нашёл UI/UX Designer 09.10.2026)
+  document.documentElement.style.setProperty('--viewas-h', bar && !bar.hidden ? bar.offsetHeight + 'px' : '0px');
 }
 async function toggleViewAs() {
   const on = !(state.user && state.user.view_as);

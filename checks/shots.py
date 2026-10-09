@@ -8,6 +8,7 @@
   python checks/shots.py --all                        — все разделы и вкладки (тот же набор, что обходит checks/pages.js)
   python checks/shots.py --out папка home             — куда сложить (по умолчанию временная папка, не репозиторий)
   python checks/shots.py --dark home                  — в тёмной теме (07.10.2026)
+  python checks/shots.py --as-employee home           — глазами сотрудника: режим «Смотреть как сотрудник» (09.10.2026)
 
 Раздел пишется как в адресе после #: home, hr/requests, admin/services."""
 import os, sys, tempfile
@@ -58,6 +59,9 @@ def main():
             page = ctx.new_page()
             page.goto(base + "/#home")
             page.wait_for_function(READY, timeout=30000)
+            if "--as-employee" in args:                       # глазами сотрудника: режим «Смотреть как сотрудник» служебной учётки (09.10.2026)
+                page.evaluate("fetch('/api/me/view-as', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({on: true})})")
+                page.wait_for_timeout(600)
             if "--all" in args:
                 views = page.evaluate(ALL_VIEWS_JS)
             for v in views:
@@ -72,7 +76,7 @@ def main():
                     page.wait_for_function(LOADED, timeout=20000)
                     page.add_style_tag(content=CALM)
                     page.wait_for_timeout(700)
-                    path = os.path.join(out, f"{v.replace('/', '_')}_{w}{'_dark' if '--dark' in args else ''}.png")
+                    path = os.path.join(out, f"{v.replace('/', '_')}_{w}{'_dark' if '--dark' in args else ''}{'_emp' if '--as-employee' in args else ''}.png")
                     page.screenshot(path=path, full_page=True)
                     made.append((v, name, path))
                 except Exception as e:  # noqa: BLE001 — один несостоявшийся снимок не должен отменять остальные

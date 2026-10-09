@@ -663,6 +663,11 @@ def _set_setting(key, value):
 _svc_written = {}   # (имя, удачно?) -> когда писали: частые удачные отметки (AI отвечает десятки раз в минуту) пишем не чаще раза в минуту
 
 
+def _no_vendor(text):
+    """Название модели и поставщика AI в интерфейсе не показываем — даже администратору (правило пользователя; 09.10.2026)."""
+    return re.sub(r"(?i)(models/)?\b(gemini|google|generativelanguage|anthropic|claude|openai|gpt)[\w.\-/:]*", "модель", str(text or ""))
+
+
 def _svc_get(key):
     try:
         return json.loads(_setting("svc_" + key) or "{}")
@@ -3047,11 +3052,11 @@ def _services_state(db):
         add("ai", "Connect AI", "bad", "нет ключа", [("Причина", "файл api_key.txt пуст — бот и перевод не работают")], check=False)
     else:
         state = "warn" if _svc_failed(m) else "ok"
-        rows = [("Последний ответ", _svc_when(m.get("ok_at"))), ("Ответила модель", m.get("ok_info")),
+        rows = [("Последний ответ", _svc_when(m.get("ok_at"))),
                 ("Вопросов боту сегодня", db.execute("SELECT COUNT(*) FROM audit WHERE path='/api/ask' AND status=200 AND ts LIKE ?",
                                                     (datetime.utcnow().date().isoformat() + "%",)).fetchone()[0])]
         if m.get("err_at"):
-            rows.append(("Последняя ошибка", f"{m.get('err')} ({_svc_when(m['err_at'])})"))
+            rows.append(("Последняя ошибка", f"{_no_vendor(m.get('err'))} ({_svc_when(m['err_at'])})"))
         add("ai", "Connect AI", state, "отвечает" if state == "ok" else "последний запрос не прошёл", rows, check=True)
 
     # перевод портала
@@ -3139,7 +3144,7 @@ def _services_state(db):
          ("Расход за месяц", "%.2f $" % _cw_month_cost(db)), ("Замечаний", db.execute("SELECT COUNT(*) FROM cowork_notes").fetchone()[0]),
          ("Проектов", db.execute("SELECT COUNT(*) FROM cowork_projects").fetchone()[0]),
          ("Последнее сообщение", _svc_when(m.get("ok_at"))),
-         ("Последняя ошибка", f"{m.get('err')} ({_svc_when(m.get('err_at'))})" if m.get("err_at") else "")])
+         ("Последняя ошибка", f"{_no_vendor(m.get('err'))} ({_svc_when(m.get('err_at'))})" if m.get("err_at") else "")])
     return out
 
 

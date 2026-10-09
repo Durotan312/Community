@@ -1297,7 +1297,7 @@ html[data-theme="dark"] .lightbox-overlay{background:rgba(0,0,0,0.92);}
 html[data-theme="dark"] .empty,html[data-theme="dark"] .soon-card{background:var(--bg-soft);}
 html[data-theme="dark"] img.person-photo,html[data-theme="dark"] .gal-photo img{filter:brightness(0.92);}
 /* схемы офиса нарисованы на светлом фоне: в тёмной теме переворачиваем цвета, сохраняя оттенки (07.10.2026, замечание пользователя «карта офиса почему-то белая») */
-html[data-theme="dark"] .office-plan-wrap img{filter:invert(1) hue-rotate(180deg) brightness(0.9);}
+html[data-theme="dark"] .office-plan-wrap img{filter:invert(1) hue-rotate(180deg) brightness(3) contrast(0.8);}   /* 09.10.2026: с brightness(0.9) план был почти чёрным, столов не видно */
 .thinking-note{font-size:12.5px;color:var(--ink-soft);margin-left:10px;}
 .bubble.bot.thinking{display:flex;align-items:center;flex-wrap:wrap;gap:4px;}
 
@@ -1916,7 +1916,7 @@ html[data-theme="dark"] .partners-wall{background:#FEFEFE;}
 
 /* ---- чат: окно ровно по высоте экрана, прокрутка только внутри ленты ---- */
 .body-row.chat-mode{
-  height:calc(100vh - var(--masthead-h, 70px));
+  height:calc(100vh - var(--masthead-h,70px) - var(--viewas-h,0px));
   overflow:hidden;
 }
 .body-row.chat-mode .main{height:100%;padding:16px 0 16px;overflow:hidden;}
@@ -1924,11 +1924,11 @@ html[data-theme="dark"] .partners-wall{background:#FEFEFE;}
 .chat-log{overscroll-behavior:contain;}   /* дошёл до края — страница не поедет */
 html.chat-open,html.chat-open body{overflow:hidden;height:100%;}
 @media (max-width:860px){.chat-shell{height:100%;}}
-.body-row.chat-mode{height:calc(100vh - var(--masthead-h, 70px));box-sizing:border-box;}
+.body-row.chat-mode{height:calc(100vh - var(--masthead-h,70px) - var(--viewas-h,0px));box-sizing:border-box;}
 .body-row.chat-mode .main{padding:12px 0 12px;box-sizing:border-box;}
 
 /* ---- чат: жёсткая фиксация высоты (перебивает все более ранние правила) ---- */
-.body-row.chat-mode{height:calc(100vh - var(--masthead-h,70px)) !important;max-height:calc(100vh - var(--masthead-h,70px)) !important;overflow:hidden !important;}
+.body-row.chat-mode{height:calc(100vh - var(--masthead-h,70px) - var(--viewas-h,0px)) !important;max-height:calc(100vh - var(--masthead-h,70px) - var(--viewas-h,0px)) !important;overflow:hidden !important;}
 .body-row.chat-mode .main{height:100% !important;max-height:100% !important;min-height:0 !important;overflow:hidden !important;display:flex !important;flex-direction:column !important;}
 .chat-shell{height:100% !important;max-height:100% !important;min-height:0 !important;flex:1 1 auto !important;display:flex !important;flex-direction:column !important;overflow:hidden !important;}
 .chat-log{flex:1 1 auto !important;min-height:0 !important;overflow-y:auto !important;}
@@ -1936,8 +1936,8 @@ html.chat-open,html.chat-open body{overflow:hidden;height:100%;}
 /* ---- чат: .main внутри горизонтального флекса — задаём высоту явно ---- */
 .body-row.chat-mode{align-items:stretch !important;}
 .body-row.chat-mode .main{
-  height:calc(100vh - var(--masthead-h,70px)) !important;
-  max-height:calc(100vh - var(--masthead-h,70px)) !important;
+  height:calc(100vh - var(--masthead-h,70px) - var(--viewas-h,0px)) !important;
+  max-height:calc(100vh - var(--masthead-h,70px) - var(--viewas-h,0px)) !important;
   flex:1 1 auto !important;
 }
 .chat-shell{height:auto !important;max-height:none !important;flex:1 1 0 !important;min-height:0 !important;}
@@ -2089,8 +2089,8 @@ body.sidenav-collapsed .sidenav-title{display:none;}
 }
 /* Яндекс/старые сборки Chromium: 100vh может включать панель браузера — используем dvh, где есть */
 @supports (height: 100dvh){
-  .body-row.chat-mode{height:calc(100dvh - var(--masthead-h,68px)) !important;max-height:calc(100dvh - var(--masthead-h,68px)) !important;}
-  .body-row.chat-mode .main{height:calc(100dvh - var(--masthead-h,68px)) !important;max-height:calc(100dvh - var(--masthead-h,68px)) !important;}
+  .body-row.chat-mode{height:calc(100dvh - var(--masthead-h,68px) - var(--viewas-h,0px)) !important;max-height:calc(100dvh - var(--masthead-h,68px) - var(--viewas-h,0px)) !important;}
+  .body-row.chat-mode .main{height:calc(100dvh - var(--masthead-h,68px) - var(--viewas-h,0px)) !important;max-height:calc(100dvh - var(--masthead-h,68px) - var(--viewas-h,0px)) !important;}
   @media (min-width:1101px){.sidenav{bottom:0;height:auto;}}
 }
 /* карточки руководителей на Road Map: не уже минимума, переносятся строками при нехватке места */
@@ -3675,3 +3675,45 @@ html{scrollbar-gutter:stable;}
   body:not(.sidenav-collapsed) .nav-item.side > .side-badge{position:absolute;left:19px;top:1px;margin:0;min-width:15px;height:15px;padding:0 3px;font-size:9.5px;box-shadow:0 0 0 2px var(--bg);}
   body:not(.sidenav-collapsed) .nav-item.side.active > .side-badge{background:#fff;color:var(--orange);box-shadow:none;}
 }
+/* проверка дизайна перед показом (09.10.2026) */
+/* книга месяца на телефоне: обложка слева, название справа — как в компактном виде на ноутбуке, а не обложка во весь экран */
+@media (max-width:860px){
+  .widget-book .book-body{display:flex;align-items:center;gap:14px;min-height:138px;}
+  .widget-book .book-cover{width:92px !important;height:138px !important;flex:none;margin:0;}
+  .widget-book .book-cover-empty{font-size:12px;padding:8px;}
+  .widget-book .book-text{min-height:0;flex:1;min-width:0;}
+}
+/* календарь, список «Ближайшие» на телефоне: дата и плашка в одну строку, название и описание под ними во всю ширину */
+@media (max-width:600px){
+  .event-row{flex-wrap:wrap;row-gap:4px;}
+  .event-row .event-type{margin-left:auto;}
+  .event-row > div[style]{flex-basis:100%;order:2;}
+  .event-row > .btn{order:3;}
+}
+/* «Мой отпуск» на телефоне: плитки с цифрами поровну в ряд */
+@media (max-width:720px){ .vac-tiles{display:flex;gap:10px;} .vac-tile{flex:1 1 0;min-width:0;} }
+/* окно «У вас нет прав»: подпись под названием ровно, значок не вплотную к шапке */
+.cw-denied .cw-brand{text-align:left;}
+.cw-denied-mark{margin-top:14px;}
+
+/* ===== проверка дизайна перед показом 09.10.2026 ===== */
+/* «Частые вопросы» у новичков: знак вопроса был оранжевым на оранжевом */
+.faq-link-mark,html[data-theme="dark"] .faq-link-mark{color:#fff;}
+/* тёмная тема: квадратик «Праздник» в легенде календаря и плашка «Только для руководителей» */
+html[data-theme="dark"] .cal-legend .hol::before{background:var(--orange-soft);border-color:var(--orange);}
+html[data-theme="dark"] .req-type-badge{color:#FFB27A;}
+/* почта в карточке сотрудника: перенос перед «@», а не посреди слова */
+.person-card .person-email{overflow-wrap:break-word;word-break:normal;}
+/* блок «Руководители» в «Сотрудниках»: отступ до следующего заголовка, «Читать →» на одной линии */
+.people-leaders{margin-bottom:28px;}
+.people-leaders .leader-card{display:flex;flex-direction:column;}
+.people-leaders .leader-more{margin-top:auto;padding-top:10px;}
+/* партнёры: у карточки без сайта не рисуем пустую линию-разделитель */
+.partner-foot:not(:has(.partner-link)){border-top:0;padding-top:0;}
+/* Road Map: название подразделения целиком, а не «Коммерция и развитие бизн…» */
+.og-band-title{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.2;}
+/* панель администратора: длинное значение — под подписью во всю ширину; «Скачать» без подчёркивания */
+.adm-row b{overflow-wrap:break-word;min-width:0;}
+.adm-row.long{flex-direction:column;align-items:flex-start;gap:2px;}
+.adm-row.long b{text-align:left;}
+a.icon-btn{text-decoration:none;}
