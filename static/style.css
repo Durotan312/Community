@@ -3725,40 +3725,42 @@ a.icon-btn{text-decoration:none;}
   .people-leaders > .person-card{flex:0 0 calc((100% - 36px) / 4);min-width:0;box-sizing:border-box;}
 }
 
-/* ===== главная 09.10.2026: девиз в баннере, «Компания в цифрах» без кольца ===== */
-.hero-motto{font-family:'Mulish',sans-serif;font-weight:600;font-size:19px;line-height:1.4;margin-top:14px;padding-left:16px;
-  border-left:3px solid rgba(255,255,255,.7);max-width:46ch;text-wrap:balance;}
-.hero-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
-.hero-chips:empty{display:none;}
-.hero-chips .hero-chip{margin-top:0;}
-.stats .stats-title{margin-bottom:14px;}
-/* второй вариант главной (09.10.2026): цифры — в баннере 2×2, подразделения — строками в три колонки */
-.hero{flex-direction:column;align-items:stretch;flex-wrap:nowrap;gap:20px;padding:30px 32px;}
-.hero-text{flex:none;}
-.hero-motto{max-width:none;}
-.hero-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
-.hero-stat{min-width:0;padding:16px 16px 14px;text-align:left;cursor:pointer;transition:background .15s ease;}
-.hero-stat:hover{background:rgba(255,255,255,0.24);}
-.hero-stat b{font-size:34px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;}
-.hero-stat span{font-size:12.5px;font-weight:600;margin-top:6px;opacity:.95;}
-.divs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
-.divs-tile{display:flex;flex-wrap:wrap;align-items:center;align-content:flex-start;gap:10px;border:1px solid var(--border);border-radius:12px;padding:11px 14px;cursor:pointer;min-width:0;
-  animation:rowIn .4s ease backwards;transition:border-color .15s ease,background .15s ease;}
-.divs-tile:hover{border-color:var(--orange);background:var(--orange-tint);}
-.divs-tile .org-code{flex-shrink:0;}
-.divs-tile b{font:800 22px/1 'Mulish',sans-serif;color:var(--ink);flex-shrink:0;min-width:26px;text-align:right;margin-left:auto;}
-.divs-name{order:3;flex:1 1 100%;min-width:0;font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.3;overflow-wrap:break-word;}
-@media (max-width:1250px){.divs-grid{grid-template-columns:repeat(2,1fr);}}
+/* ===== главная: баннер «Сигнал» и плашки подразделений (вид выбран пользователем 09.10.2026) ===== */
+.home-hero{position:relative;overflow:hidden;border-radius:20px;margin-bottom:14px;background:#FFE2CC;border:1px solid #FFD3B5;color:var(--ink);}
+.home-arcs{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+.home-arcs circle{stroke:#fff;stroke-width:14;opacity:.5;}
+.home-arcs circle:nth-child(-n+2){stroke-width:30;opacity:.85;}
+.home-hero-in{position:relative;padding:28px 34px 24px;}
+.home-date{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--orange-dark);}
+.home-motto{margin:14px 0 22px;font:800 26px/1.25 'Mulish',sans-serif;letter-spacing:-.015em;max-width:27ch;text-wrap:balance;}
+.home-motto em{font-style:normal;color:var(--orange-dark);white-space:nowrap;}
+.home-kpis{display:flex;flex-wrap:wrap;max-width:540px;}
+.home-kpi{flex:1 1 110px;padding:0 20px;border-left:1px solid rgba(0,0,0,.14);cursor:pointer;}
+.home-kpi:first-child{padding-left:0;border-left:0;}
+.home-kpi b{display:block;font:800 30px/1 'Mulish',sans-serif;font-variant-numeric:tabular-nums;transition:color .15s ease;}
+.home-kpi:hover b{color:var(--orange-dark);}
+.home-kpi span{display:block;margin-top:5px;font-size:12.5px;font-weight:600;color:var(--ink-soft);}
+html[data-theme="dark"] .home-hero{background:var(--surface);border-color:rgba(255,102,0,.4);}
+html[data-theme="dark"] .home-arcs circle{stroke:#FF6600;stroke-width:2;opacity:.3;}
+html[data-theme="dark"] .home-arcs circle:nth-child(1){stroke-width:26;opacity:.5;}
+html[data-theme="dark"] .home-arcs circle:nth-child(2){stroke-width:26;opacity:.43;}
+html[data-theme="dark"] .home-date,html[data-theme="dark"] .home-motto em,html[data-theme="dark"] .home-kpi:hover b{color:var(--orange);}
+html[data-theme="dark"] .home-kpi{border-color:rgba(255,255,255,.2);}
+.home-divs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:28px;}
+.home-div{display:inline-flex;align-items:center;gap:8px;padding:7px 14px 7px 7px;border-radius:999px;background:var(--surface);border:1px solid var(--border);
+  font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;transition:border-color .15s ease;}
+.home-div:hover{border-color:var(--orange);}
+.home-div i{font:800 10.5px/1 'Mulish',sans-serif;font-style:normal;letter-spacing:.06em;color:var(--orange-dark);background:var(--orange-soft);padding:6px 9px;border-radius:999px;white-space:nowrap;}
+.home-div b{font:800 15px/1 'Mulish',sans-serif;color:var(--orange);}
+html[data-theme="dark"] .home-div i{color:#FFB27A;}
 @media (max-width:700px){
-  .hero{padding:22px 20px;}
-  .hero-motto{font-size:16px;}
-  .hero-stats{grid-template-columns:repeat(2,1fr);}
-  .hero-stat b{font-size:28px;}
-  .divs-grid{grid-template-columns:1fr;}
-  .divs-tile{flex-wrap:nowrap;}
-  .divs-name{order:0;flex:1 1 0;}
+  .home-hero-in{padding:22px 20px 8px;}
+  .home-motto{font-size:21px;margin:12px 0 18px;}
+  .home-kpi{flex:1 1 40%;padding:0 0 0 14px;margin-bottom:14px;}
+  .home-kpi:nth-child(odd){padding-left:0;border-left:0;}
+  .home-kpi b{font-size:26px;}
+  .home-div{font-size:12.5px;}
 }
-@media (prefers-reduced-motion:reduce){.divs-tile{animation:none;}}
 
 /* книга месяца: смена свайпом — прежняя уезжает влево, новая въезжает справа (09.10.2026) */
 .widget-book{overflow:hidden;}

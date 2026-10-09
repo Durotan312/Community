@@ -1892,58 +1892,9 @@ setInterval(() => {
 // девиз компании — слова пользователя 09.10.2026, дословно
 const MOTTO = 'Наша главная сила — в людях, а наши возможности ограничены только масштабом нашего мышления.';
 
-function heroHtml() {
-  const now = new Date();
-  const ast = astanaNow();
-  const h = ast.getUTCHours();
-  const greet = h < 5 ? 'Доброй ночи' : h < 12 ? 'Доброе утро' : h < 18 ? 'Добрый день' : 'Добрый вечер';
-  const dateStr = ast.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
-  const divisions = new Set(state.employees.map(e => e.department).filter(d => d && d !== 'Без отдела' && d !== 'Руководство')).size;
-  // ближайший день рождения
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const bd = state.employees.filter(p => p.birthday).map(p => {
-    const d = new Date(p.birthday);
-    const next = new Date(today.getFullYear(), d.getMonth(), d.getDate());
-    if (next < today) next.setFullYear(today.getFullYear() + 1);
-    return { p, days: Math.round((next - today) / 86400000) };
-  }).sort((a, b) => a.days - b.days)[0];
-  const bdText = !bd ? '' : bd.days === 0
-    ? `Сегодня день рождения у ${escapeHtml(bd.p.name)} — поздравьте!`
-    : bd.days <= 14 ? `Через ${bd.days} ${pluralRu(bd.days, 'день', 'дня', 'дней')} день рождения у ${escapeHtml(bd.p.name)}` : '';
-  // счётчик до ближайшего события из календаря
-  const todayIso = isoDate(today);
-  const nextEv = state.events.filter(e => e.date >= todayIso).sort((a, b) => a.date.localeCompare(b.date))[0];
-  let evChip = '';
-  if (nextEv) {
-    const days = Math.round((new Date(nextEv.date) - today) / 86400000);
-    evChip = `<div class="hero-chip" onclick="goToView('events')">${days === 0 ? 'Сегодня' : days === 1 ? 'Завтра' : `Через ${days} ${pluralRu(days, 'день', 'дня', 'дней')}`} — ${escapeHtml(nextEv.title)}</div>`;
-  }
-  // цифры компании — в баннере, одним блоком с девизом (второй вариант главной, 09.10.2026)
-  const staff = state.employees.length, divs = divisionCounts().length, parts = state.partners.length;
-  const kpis = [
-    [staff, pluralRu(staff, 'сотрудник', 'сотрудника', 'сотрудников'), 'people'],
-    [divs, pluralRu(divs, 'подразделение', 'подразделения', 'подразделений'), 'org'],
-    [state.projects.length, pluralRu(state.projects.length, 'проект', 'проекта', 'проектов'), 'projects'],
-    [parts, pluralRu(parts, 'партнёр', 'партнёра', 'партнёров'), 'partners'],
-  ].filter(k => k[0] > 0);
-  return `
-    <div class="hero">
-      <div class="hero-blob a"></div><div class="hero-blob b"></div>
-      <div class="hero-text">
-        <div class="hero-date">${dateStr[0].toUpperCase() + dateStr.slice(1)}</div>
-        <div class="hero-title">${greet}, Connected Home!</div>
-        <div class="hero-motto">${escapeHtml(MOTTO)}</div>
-        <div class="hero-chips">${bdText ? `<div class="hero-chip" onclick="goToView('people')">${bdText}</div>` : ''}${evChip}</div>
-      </div>
-      <div class="hero-stats">
-        ${kpis.map(([n, label, view]) => `<div class="hero-stat" onclick="goToView(${jsArg(view)})"><b data-count="${n}">0</b><span>${label}</span></div>`).join('')}
-      </div>
-    </div>`;
-}
-
-// Главная, второй вариант (09.10.2026, слова пользователя: «какой-нибудь другой вид главного экрана»):
-// цифры компании стоят в баннере рядом с девизом (heroHtml), здесь — только подразделения строками в три колонки.
-// Кольцо, полоски и дерево были раньше и отвергнуты — не возвращать.
+// Главная (вид выбран пользователем 09.10.2026 из присланных снимков): баннер с девизом, дугами из логотипа и четырьмя цифрами;
+// в светлой теме он персиковый с белыми кольцами, в тёмной — тёмный с оранжевыми дугами. Ниже — подразделения строкой плашек.
+// Кольцевая диаграмма, полоски и дерево были раньше и отвергнуты — не возвращать.
 function divisionCounts() {
   const counts = {};
   state.employees.forEach(e => {
@@ -1953,22 +1904,39 @@ function divisionCounts() {
   });
   return Object.entries(counts).sort((a, b) => b[1] - a[1]);
 }
+function heroHtml() {
+  const ast = astanaNow(), h = ast.getUTCHours();
+  const greet = h < 5 ? 'Доброй ночи' : h < 12 ? 'Доброе утро' : h < 18 ? 'Добрый день' : 'Добрый вечер';
+  const dateStr = ast.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+  const staff = state.employees.length, divs = divisionCounts().length, parts = state.partners.length;
+  const kpis = [
+    [staff, pluralRu(staff, 'сотрудник', 'сотрудника', 'сотрудников'), 'people'],
+    [divs, pluralRu(divs, 'подразделение', 'подразделения', 'подразделений'), 'org'],
+    [state.projects.length, pluralRu(state.projects.length, 'проект', 'проекта', 'проектов'), 'projects'],
+    [parts, pluralRu(parts, 'партнёр', 'партнёра', 'партнёров'), 'partners'],
+  ].filter(k => k[0] > 0);
+  return `
+    <div class="home-hero">
+      <svg class="home-arcs" aria-hidden="true">${[90, 170, 250, 330, 410, 490].map(r => `<circle cx="100%" cy="100%" r="${r}" fill="none"/>`).join('')}</svg>
+      <div class="home-hero-in">
+        <div class="home-date">${dateStr[0].toUpperCase() + dateStr.slice(1)} · ${greet}, Connected Home!</div>
+        <div class="home-motto">${escapeHtml(MOTTO).replace('в людях', '<em>в людях</em>')}</div>
+        <div class="home-kpis">
+          ${kpis.map(([n, label, view]) => `<div class="home-kpi" onclick="goToView(${jsArg(view)})"><b data-count="${n}">0</b><span>${label}</span></div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+}
 function statsHtml() {
   const rows = divisionCounts();
   if (!rows.length) return '';
   const code = Object.fromEntries((typeof DIVISIONS !== 'undefined' ? DIVISIONS : []).map(([n, c]) => [n, c]));
   return `
-    <div class="stats">
-      <div class="stats-title">Подразделения</div>
-      <div class="divs-grid">
-        ${rows.map(([name, n], i) => `
-          <div class="divs-tile" style="animation-delay:${(0.15 + i * 0.05).toFixed(2)}s"
-               onclick="state.orgCollapsed=null;goToView('org');setTimeout(()=>openOrgDiv(${jsArg(name)}),50)">
-            <span class="org-code">${escapeHtml(code[name] || 'CEO')}</span>
-            <span class="divs-name">${escapeHtml(name)}</span>
-            <b>${n}</b>
-          </div>`).join('')}
-      </div>
+    <div class="home-divs">
+      ${rows.map(([name, n]) => `
+        <span class="home-div" onclick="state.orgCollapsed=null;goToView('org');setTimeout(()=>openOrgDiv(${jsArg(name)}),50)">
+          <i>${escapeHtml(code[name] || 'CEO')}</i>${escapeHtml(name)}<b>${n}</b>
+        </span>`).join('')}
     </div>`;
 }
 
