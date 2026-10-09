@@ -151,6 +151,15 @@ SCHEMA = {
         "cowork": "INTEGER NOT NULL DEFAULT 0",   # допуск к Connected WorkFlow (08.10.2026): ставит админ; у admin всегда есть
         "cowork_only": "INTEGER NOT NULL DEFAULT 0",   # отдельная учётка только для WorkFlow (08.10.2026): портал ей закрыт
     },
+    "vacation_balance": {                # остаток отпуска из таблицы HR (09.10.2026). КОНФИДЕНЦИАЛЬНО: отдаётся только самому сотруднику
+        "id": "TEXT PRIMARY KEY",        # и только через /api/vacation; в справочник, боту, в переводы и другим ролям не попадает
+        "employee_id": "TEXT NOT NULL",
+        "company": "TEXT",               # лист таблицы = юрлицо (у некоторых людей остаток в двух компаниях)
+        "total": "REAL NOT NULL DEFAULT 0",
+        "periods": "TEXT",               # JSON: рабочие периоды — начало, конец, положено, использовано, остаток
+        "loaded": "TEXT NOT NULL",       # когда загружено из таблицы
+        "email": "TEXT NOT NULL DEFAULT ''",   # почта карточки В МОМЕНТ ЗАГРУЗКИ: остаток привязан к ней, а не к тому, что позже вписали в карточку
+    },
     "request_log": {                     # история заявки по шагам с точным временем (09.10.2026)
         "id": "TEXT PRIMARY KEY",
         "request_id": "TEXT NOT NULL",
@@ -1253,7 +1262,10 @@ def user_item(item_id):
             return jsonify({"error": "Нельзя снять права администратора с самого себя."}), 400
         db.execute("UPDATE users SET role=? WHERE id=?", (role, item_id))
     if "email" in data:
-        db.execute("UPDATE users SET email=? WHERE id=?", ((data.get("email") or "").strip().lower(), item_id))
+        new_email = (data.get("email") or "").strip().lower()
+        if new_email and db.execute("SELECT 1 FROM users WHERE lower(email)=? AND id<>?", (new_email, item_id)).fetchone():
+            return jsonify({"error": "Эта почта уже указана у другой учётной записи."}), 400   # одна почта — одна учётка (09.10.2026)
+        db.execute("UPDATE users SET email=? WHERE id=?", (new_email, item_id))
     if "cowork" in data:                                      # допуск к Connected WorkFlow — только админ (мы уже под /api/users)
         db.execute("UPDATE users SET cowork=? WHERE id=?", (1 if data["cowork"] in (1, True, "1", "true") else 0, item_id))
     if "cowork_only" in data:                                 # учётка только для WorkFlow
@@ -4618,6 +4630,40 @@ def office_plans():
     return save()
 
 
+def _vacation_balance(db, user):
+    """Остаток отпуска вошедшего — и только его (09.10.2026, слова пользователя: «конфиденциальная информация, каждый
+    сотрудник должен видеть своё и никто больше»). Карточка находится ТОЛЬКО по почте учётной записи и только если
+    такая почта в справочнике одна: по совпадению имени остаток не показываем — имя может совпасть или быть вписано
+    с ошибкой. Адрес не принимает никаких параметров «чей остаток»: чужой запросить нечем. Админ и HR видят только свой."""
+    # Три замка (Security Engineer 09.10.2026 показал, что HR мог обойти одну лишь сверку почты):
+    # 1) остаток привязан к почте карточки на момент загрузки (vacation_balance.email) — перестановка почты в карточках
+    #    чужой остаток не открывает; 2) почта учётки, почта карточки сейчас и почта при загрузке должны совпасть, и такая
+    #    карточка одна; 3) остатки показываются, только когда первый вход идёт письмом на ящик сотрудника (режим mail) —
+    #    тогда учётку с этой почтой мог завести только хозяин ящика. Нет почты у портала — остатки скрыты у всех.
+    if register_mode() != "mail":
+        return None
+    row = db.execute("SELECT email FROM users WHERE id=?", (user["id"],)).fetchone()
+    email = ((row["email"] if row else "") or "").strip().lower()
+    if not email:
+        return None
+    cards = [r["id"] for r in db.execute("SELECT id, email FROM employees") if (r["email"] or "").strip().lower() == email]
+    if len(cards) != 1:
+        return None
+    rows = db.execute("SELECT company, total, periods, loaded FROM vacation_balance WHERE employee_id=? AND email=? ORDER BY rowid",
+                      (cards[0], email)).fetchall()
+    if not rows:
+        return None
+    items = []
+    for r in rows:
+        try:
+            periods = json.loads(r["periods"] or "[]")
+        except ValueError:
+            periods = []
+        total = r["total"]
+        items.append({"company": r["company"] or "", "total": int(total) if total == int(total) else total, "periods": periods})
+    return {"as_of": max(r["loaded"] for r in rows)[:10], "items": items}
+
+
 @app.route("/api/vacation")
 def vacation_summary():
     """Личная справка: сколько дней отпуска отмечено в табеле за год. Только про себя."""
@@ -4627,9 +4673,11 @@ def vacation_summary():
     if not re.fullmatch(r"\d{4}", year):
         return jsonify({"error": "Год в формате ГГГГ."}), 400
     out = {"year": year, "norm": VACATION_NORM_DAYS, "found": me is not None,
-           "periods": [], "used": 0, "unpaid": 0}
+           "periods": [], "used": 0, "unpaid": 0, "balance": _vacation_balance(db, current_user())}
     if me is None:
-        return jsonify(out)
+        resp = jsonify(out)
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
     rows = db.execute(
         "SELECT date, code, comment FROM attendance WHERE employee_id=? AND date LIKE ? "
         "AND code IN ('Т','БС') ORDER BY date",
@@ -4646,7 +4694,9 @@ def vacation_summary():
     out["used"] = sum(p["days"] for p in out["periods"] if p["code"] == "Т")
     out["unpaid"] = sum(p["days"] for p in out["periods"] if p["code"] == "БС")
     out["periods"].reverse()             # свежие сверху
-    return jsonify(out)
+    resp = jsonify(out)
+    resp.headers["Cache-Control"] = "no-store"      # личный остаток не должен оседать в кэше браузера или прокси
+    return resp
 
 
 @app.route("/api/attendance", methods=["GET", "PUT"])
@@ -6311,6 +6361,9 @@ def hr_invite():
     user = db.execute("SELECT * FROM users WHERE lower(email)=? OR lower(login)=?", (email, email)).fetchone()
     if user and not user["must_set_password"]:
         return jsonify({"error": "У этого сотрудника уже есть пароль. Сбросить его может администратор."}), 400
+    # ожидающую учётку с ролью выше «Сотрудник» HR не приглашает: по ссылке он вошёл бы в неё сам (Security Engineer 09.10.2026)
+    if user and user["role"] != "user":
+        return jsonify({"error": "Эту учётную запись приглашает администратор."}), 403
     if user:
         uid = user["id"]
     else:
@@ -6321,6 +6374,21 @@ def hr_invite():
         )
     link = _invite_url(_new_invite(db, uid))
     db.commit()
+    if register_mode() == "mail":
+        # почта работает — ссылка уходит письмом на ящик сотрудника, HR её не видит: иначе по ней можно войти за человека
+        # и увидеть его личное (остаток отпуска). Так же устроен самостоятельный первый вход.
+        short = (emp["name"] or "").split()[-1] if emp["name"] else ""
+        body = (f"Здравствуйте, {short}!\n\nОтдел кадров приглашает вас на портал Connected Community. "
+                "Откройте ссылку и придумайте пароль:\n\n" + link + "\n\n"
+                "Ссылка одноразовая.\n\n— Connected Community, внутренний портал Connected Home")
+        try:
+            sent = send_mail(email, "Вход в портал Connected Community", body)
+        except Exception as e:  # noqa: BLE001
+            print(f"[ошибка отправки письма] {e}", flush=True)
+            sent = False
+        if sent is False:
+            return jsonify({"error": "Письмо не отправилось. Попробуйте ещё раз или обратитесь к администратору."}), 502
+        return jsonify({"sent": True, "name": emp["name"], "login": email})
     return jsonify({"invite_url": link, "name": emp["name"], "login": email})
 
 

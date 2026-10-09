@@ -3630,7 +3630,7 @@ html{scrollbar-gutter:stable;}
 .req-log{margin:14px 0 4px;border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:var(--bg-soft);}
 .req-log-title{font-family:'Mulish',sans-serif;font-weight:800;font-size:14px;margin-bottom:8px;}
 .req-log-row{display:flex;gap:12px;align-items:baseline;padding:6px 0;border-top:1px solid var(--border);font-size:13.5px;}
-.req-log-row:first-of-type{border-top:0;}
+.req-log-title + .req-log-row{border-top:0;}
 .req-log-time{flex:none;width:112px;color:var(--orange-dark);font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;}
 .req-log-what{min-width:0;overflow-wrap:anywhere;}
 .req-log-text{color:var(--ink-soft);margin-top:2px;}
@@ -3639,3 +3639,18 @@ html{scrollbar-gutter:stable;}
 .req-detail-top .req-row-date{white-space:normal;min-width:0;}
 @media (max-width:720px){.req-log-row{flex-direction:column;gap:2px;}.req-log-time{width:auto;}}
 @media (max-width:700px){.req-detail-top .req-row-date{display:block;}}   /* в окне заявки дата и время видны и на телефоне (09.10.2026) */
+
+/* остаток отпуска — личный блок в «Моём отпуске» (09.10.2026) */
+.vac-balance{background:var(--surface);border:2px solid var(--orange);border-radius:16px;padding:20px 22px;margin-bottom:22px;}
+.vac-balance-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;}
+.vac-balance-date{font-size:12.5px;color:var(--ink-soft);}
+.vac-bal-item{margin-bottom:16px;}
+.vac-bal-total{display:flex;align-items:baseline;gap:10px;margin-bottom:10px;}
+.vac-bal-total .vac-num{color:var(--orange);font-size:40px;line-height:1;}
+.vac-bal-table{border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13.5px;}
+.vac-bal-row{display:grid;grid-template-columns:minmax(0,2.2fr) repeat(3,minmax(0,1fr));gap:8px;padding:8px 12px;border-top:1px solid var(--border);font-variant-numeric:tabular-nums;}
+.vac-bal-row:first-child{border-top:0;}
+.vac-bal-row.head{background:var(--bg-soft);font-weight:700;font-size:12px;color:var(--ink-soft);}
+.vac-bal-row span{min-width:0;overflow-wrap:anywhere;}
+.vac-bal-row span:not(:first-child){text-align:right;}
+@media (max-width:720px){.vac-bal-row{grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr));font-size:12.5px;padding:8px;}.vac-bal-row.head{font-size:10.5px;}}

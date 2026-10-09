@@ -185,6 +185,94 @@ if tmp:
 HR.put(f"/api/employees/{emp_card['id']}", json={"hired": ""})
 db.execute("DELETE FROM profiles WHERE employee_id=?", (emp_card["id"],)); db.commit()
 
+print("== Остаток отпуска — только свой (09.10.2026, конфиденциально)")
+# две тестовые карточки со своей почтой и по учётке к каждой; у каждой свой остаток с меткой, которую ищем по всему порталу
+_now = "2026-10-09T10:00:00"
+VA, VB = uuid.uuid4().hex, uuid.uuid4().hex
+for _id, _nm, _em in ((VA, "Отпускной Первый", "vac.a@connectedhome.kz"), (VB, "Отпускной Второй", "vac.b@connectedhome.kz")):
+    db.execute("INSERT INTO employees (id, name, department, email) VALUES (?,?,?,?)", (_id, _nm, "Технологии", _em))
+UA = client(mkuser("vac_a", "Отпускной Первый", "user", "vac.a@connectedhome.kz"))
+UB = client(mkuser("vac_b", "Отпускной Второй", "user", "vac.b@connectedhome.kz"))
+_rm, _sm = app.register_mode, app.send_mail
+_mails = []
+app.register_mode = lambda: "mail"                       # остатки показываются только при первом входе письмом
+app.send_mail = lambda to, subject, body, html=None: (_mails.append((to, body)) or True)
+def _bal(emp, total, mark):
+    em = (db.execute("SELECT email FROM employees WHERE id=?", (emp,)).fetchone()["email"] or "").strip().lower()
+    db.execute("INSERT INTO vacation_balance (id, employee_id, company, total, periods, loaded, email) VALUES (?,?,?,?,?,?,?)",
+               (uuid.uuid4().hex, emp, "ЧК", total, json.dumps([{"start": "2025-01-01", "end": "2025-12-31", "norm": 24, "order": mark, "used": 1, "left": total}]), _now, em))
+_bal(VA, 73, "ZZSECRETA73"); _bal(VB, 91, "ZZSECRETB91")
+_anuar = db.execute("SELECT id FROM employees WHERE name='Шарипов Ануар'").fetchone()
+if _anuar:
+    _bal(_anuar["id"], 55, "ZZSECRETN55")           # у EMP учётка без почты, имя совпадает с этой карточкой
+db.commit()
+va, vb = UA.get("/api/vacation").get_json(), UB.get("/api/vacation").get_json()
+check(va["balance"] and va["balance"]["items"][0]["total"] == 73 and len(va["balance"]["items"]) == 1 and "ZZSECRETB91" not in json.dumps(va), "первый видит свой остаток (73) и не видит чужой")
+check(vb["balance"] and vb["balance"]["items"][0]["total"] == 91 and "ZZSECRETA73" not in json.dumps(vb), "второй видит свой остаток (91) и не видит чужой")
+check(UA.get(f"/api/vacation?employee_id={VB}&id={VB}&email=vac.b@connectedhome.kz&user_id={VB}").get_json()["balance"]["items"][0]["total"] == 73, "чужой остаток нельзя запросить параметрами адреса")
+check(EMP.get("/api/vacation").get_json()["balance"] is None, "учётка без почты остаток не видит, даже если имя совпало с карточкой")
+check(ADM.get("/api/vacation").get_json()["balance"] is None and HR.get("/api/vacation").get_json()["balance"] is None, "администратор и HR чужих остатков не видят")
+# обход всего портала: ни один адрес ни под одной ролью не отдаёт чужую метку
+_leaks = []
+_rules = sorted({r.rule for r in app.app.url_map.iter_rules() if "GET" in r.methods and not r.arguments and r.rule.startswith("/api/")})
+for _nm, _c, _own in (("админ", ADM, ""), ("HR", HR, ""), ("сотрудник", EMP, ""), ("закупщик", BUY, ""), ("первый", UA, "ZZSECRETA73"), ("второй", UB, "ZZSECRETB91")):
+    for _r in _rules:
+        try:
+            _body = _c.get(_r).get_data(as_text=True)
+        except Exception as _e:  # noqa: BLE001
+            continue
+        for _m in ("ZZSECRETA73", "ZZSECRETB91", "ZZSECRETN55"):
+            if _m in _body and not (_m == _own and _r == "/api/vacation"):
+                _leaks.append(f"{_nm} {_r} {_m}")
+check(not _leaks, f"остатки отпусков не отдаёт ни один другой адрес ни одной роли (адресов {len(_rules)}): {_leaks[:5]}")
+with app.app.app_context():
+    check("ZZSECRET" not in app.build_knowledge_base(db), "остатков отпусков нет в базе знаний бота")
+    check("ZZSECRET" not in json.dumps(app._prewarm_texts(db), ensure_ascii=False), "остатки отпусков не идут в переводчик")
+# две карточки с одной почтой — неясно, чья: не показываем никому
+VC = uuid.uuid4().hex
+db.execute("INSERT INTO employees (id, name, department, email) VALUES (?,?,?,?)", (VC, "Отпускной Двойник", "Технологии", "VAC.A@connectedhome.kz")); db.commit()
+check(UA.get("/api/vacation").get_json()["balance"] is None, "одна почта у двух карточек — остаток не показываем никому")
+db.execute("DELETE FROM employees WHERE id=?", (VC,)); db.commit()
+# три обхода, найденные Security Engineer 09.10.2026: HR с почтой и своей карточкой пытается добраться до чужого остатка
+VH = uuid.uuid4().hex
+db.execute("INSERT INTO employees (id, name, department, email) VALUES (?,?,?,?)", (VH, "Кадровик Отпускной", "Администрация", "vac.hr@connectedhome.kz")); db.commit()
+HRV = client(mkuser("vac_hr", "Кадровик Отпускной", "hr", "vac.hr@connectedhome.kz"))
+_bal(VH, 11, "ZZSECRETH11"); db.commit()
+check(HRV.get("/api/vacation").get_json()["balance"]["items"][0]["total"] == 11, "HR видит свой остаток (11)")
+check(HRV.get("/api/vacation").headers.get("Cache-Control") == "no-store", "ответ с остатком не кэшируется")
+# (а) HR стирает свою почту в своей карточке и вписывает её в чужую
+HRV.put(f"/api/employees/{VH}", json={"email": ""}); HRV.put(f"/api/employees/{VB}", json={"email": "vac.hr@connectedhome.kz"})
+_b = HRV.get("/api/vacation").get_json()["balance"]
+check(_b is None or "ZZSECRETB91" not in json.dumps(_b), "HR переставил почту в карточках — чужой остаток не открылся")
+check(UB.get("/api/vacation").get_json()["balance"] is None, "у владельца после подмены почты остаток скрыт, а не показан кому-то другому")
+db.execute("UPDATE employees SET email='vac.hr@connectedhome.kz' WHERE id=?", (VH,)); db.execute("UPDATE employees SET email='vac.b@connectedhome.kz' WHERE id=?", (VB,)); db.commit()
+check(UB.get("/api/vacation").get_json()["balance"]["items"][0]["total"] == 91, "почту вернули — владелец снова видит свой остаток")
+# (б) HR просит ссылку первого входа за человека, который ещё не входил: при рабочей почте ссылка уходит письмом, HR её не получает
+VN = uuid.uuid4().hex
+db.execute("INSERT INTO employees (id, name, department, email) VALUES (?,?,?,?)", (VN, "Новичок Отпускной", "Технологии", "vac.new@connectedhome.kz")); db.commit()
+_bal(VN, 66, "ZZSECRETN66"); db.commit()
+_inv = HRV.post("/api/hr/invite", json={"employee_id": VN})
+check(_inv.status_code == 200 and _inv.get_json().get("sent") is True and "invite_url" not in _inv.get_json() and "http" not in json.dumps(_inv.get_json()) and _mails and _mails[-1][0] == "vac.new@connectedhome.kz" and "http" in _mails[-1][1], "приглашение от HR уходит письмом сотруднику, ссылку HR не видит")
+# (в) HR меняет почту чужой карточки на новую и приглашает «нового» человека — учётка получится, но остаток к ней не привязан
+HRV.put(f"/api/employees/{VA}", json={"email": "vac.fake@connectedhome.kz"})
+HRV.post("/api/hr/invite", json={"employee_id": VA})
+_fu = db.execute("SELECT id FROM users WHERE email='vac.fake@connectedhome.kz'").fetchone()
+if _fu:
+    db.execute("UPDATE users SET password_hash=?, must_set_password=0 WHERE id=?", (generate_password_hash("Passw0rd!x"), _fu["id"])); db.commit()
+    check(client(_fu["id"]).get("/api/vacation").get_json()["balance"] is None, "учётка под подменённой почтой чужой остаток не видит")
+db.execute("UPDATE employees SET email='vac.a@connectedhome.kz' WHERE id=?", (VA,)); db.commit()
+# ожидающую учётку с ролью выше сотрудника HR не приглашает; почта учётки уникальна
+VP = uuid.uuid4().hex
+db.execute("INSERT INTO employees (id, name, department, email) VALUES (?,?,?,?)", (VP, "Ожидающий Админ", "Администрация", "vac.adm@connectedhome.kz"))
+db.execute("INSERT INTO users (id, login, password_hash, name, role, email, created, must_set_password) VALUES (?,?,?,?,?,?,'2026-10-09',1)", (uuid.uuid4().hex, "vac.adm@connectedhome.kz", "!invited", "Ожидающий Админ", "admin", "vac.adm@connectedhome.kz")); db.commit()
+check(HRV.post("/api/hr/invite", json={"employee_id": VP}).status_code == 403, "ожидающую учётку администратора HR не приглашает")
+_adm_id = db.execute("SELECT id FROM users WHERE login='chk_admin'").fetchone()["id"]
+check(ADM.put(f"/api/users/{_adm_id}", json={"email": "vac.b@connectedhome.kz"}).status_code == 400 and ADM.get("/api/vacation").get_json()["balance"] is None, "чужую почту в свою учётку не вписать — она уже занята")
+app.register_mode = lambda: "code"
+check(UA.get("/api/vacation").get_json()["balance"] is None, "почта у портала не работает — остатки скрыты у всех")
+app.register_mode, app.send_mail = _rm, _sm
+db.execute("DELETE FROM vacation_balance"); db.execute("DELETE FROM employees WHERE id IN (?,?,?,?,?)", (VA, VB, VH, VN, VP))
+db.execute("DELETE FROM users WHERE email LIKE 'vac.%@connectedhome.kz'"); db.commit()
 print("== История заявки с временем (09.10.2026)")
 rl = ok(EMP.post("/api/requests", json={"type": "it", "data": {"full_name": "Шарипов Ануар", "problem": "Не работает принтер, печатает пустые листы"}}), "заявка в поддержку IT подана")
 if rl:

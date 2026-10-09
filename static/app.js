@@ -3633,6 +3633,7 @@ async function renderVacation(main) {
       ${v.unpaid ? `<div class="vac-tile"><span class="vac-num">${v.unpaid}</span><span class="vac-label">дней без сохранения зарплаты</span></div>` : ''}
     </div>
 
+    ${v.balance ? vacBalanceHtml(v.balance, ask('vacation', { purpose: 'question' })) : `
     <div class="vac-ask">
       <div>
         <div class="vac-ask-title">Сколько дней осталось именно у вас</div>
@@ -3640,7 +3641,7 @@ async function renderVacation(main) {
           а в портале пока есть отметки только за ${escapeHtml(v.year)} год. Нажмите — вопрос уйдёт в отдел кадров, ответ придёт сюда же, в «Мои заявки».</div>
       </div>
       <button class="btn secondary" onclick="${ask('vacation', { purpose: 'question' })}">Спросить у отдела кадров</button>
-    </div>
+    </div>`}
 
     <div class="vac-cols">
       <div>
@@ -3656,6 +3657,32 @@ async function renderVacation(main) {
     </div>
 
     `;
+}
+
+// Остаток отпуска по данным отдела кадров (09.10.2026). КОНФИДЕНЦИАЛЬНО: сервер отдаёт только свой остаток.
+// Блок помечен no-tr — цифры не уходят в общий кэш переводов.
+function vacBalanceHtml(b, askHandler) {
+  const many = b.items.length > 1;
+  const d = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '') ? fmtDate(s) : escapeHtml(s || '');
+  const n = x => (x === null || x === undefined || x === '') ? '—' : escapeHtml(String(x));
+  return `
+    <div class="vac-balance no-tr">
+      <div class="vac-balance-head">
+        <div class="vac-ask-title">Остаток отпуска</div>
+        <span class="vac-balance-date">данные отдела кадров на ${fmtDate(b.as_of)}</span>
+      </div>
+      ${b.items.map(it => `
+        <div class="vac-bal-item">
+          <div class="vac-bal-total"><span class="vac-num">${n(it.total)}</span>
+            <span class="vac-label">${pluralRu(Math.abs(Number(it.total)) || 0, 'день', 'дня', 'дней')} осталось${many && it.company ? ' · ' + escapeHtml(it.company) : ''}</span></div>
+          ${(it.periods || []).length ? `
+          <div class="vac-bal-table">
+            <div class="vac-bal-row head"><span>Рабочий период</span><span>Положено</span><span>Использовано</span><span>Остаток</span></div>
+            ${it.periods.map(p => `<div class="vac-bal-row"><span>${d(p.start)} — ${d(p.end)}</span><span>${n(p.norm)}</span><span>${n(p.used)}</span><span><b>${n(p.left)}</b></span></div>`).join('')}
+          </div>` : ''}
+        </div>`).join('')}
+      <div class="profile-actions"><button class="btn secondary" onclick="${askHandler}">Спросить у отдела кадров</button></div>
+    </div>`;
 }
 
 // =========================================================
@@ -4467,6 +4494,7 @@ async function submitLogin(e) {
 async function doLogout() {
   await fetch('/api/logout', { method: 'POST' });
   state.user = null;
+  const m = document.getElementById('main'); if (m) m.innerHTML = '';   // личное с экрана прошлого пользователя не остаётся в странице (09.10.2026)
   showLogin('Вы вышли из портала.');
 }
 
@@ -5627,7 +5655,7 @@ async function deleteRequest(id) {
 
 function printRequest() {
   const html = document.getElementById('reqPrintArea').cloneNode(true);
-  html.querySelector('.req-staff')?.remove();
+  html.querySelectorAll('.req-staff, .req-log').forEach(e => e.remove());   // история — служебная, на бумагу не идёт (09.10.2026)
   const printTitle = document.getElementById('reqPrintArea').dataset.title || 'Заявка';
   const w = window.open('', '_blank');
   if (!w) return showToast('Браузер заблокировал окно печати — разрешите всплывающие окна.');
@@ -5818,7 +5846,7 @@ const TABLE_NAMES = { agent_runs: 'Запуски агентов', users: 'Уч�
   leaders: 'Руководители', onboarding_steps: 'Шаги для новичков', tasks: 'Задачи', attendance: 'Отметки посещаемости', elpass_cards: 'Карты турникета',
   english_att: 'Английский: отметки', game_scores: 'Мини-игры: результаты', game_time: 'Мини-игры: время', passes: 'Пропуски', profiles: 'Профили «О себе»',
   receipts: 'Чеки', resumes: 'Резюме', translations: 'Переводы', vacancies: 'Вакансии', settings: 'Настройки', audit: 'Журнал действий',
-  request_log: 'История заявок', cowork_tasks: 'WorkFlow: задания', cowork_notes: 'WorkFlow: замечания', cowork_materials: 'WorkFlow: материалы', cowork_projects: 'WorkFlow: проекты', cowork_accounts: 'WorkFlow: учётки' };
+  request_log: 'История заявок', vacation_balance: 'Остатки отпусков', cowork_tasks: 'WorkFlow: задания', cowork_notes: 'WorkFlow: замечания', cowork_materials: 'WorkFlow: материалы', cowork_projects: 'WorkFlow: проекты', cowork_accounts: 'WorkFlow: учётки' };
 
 // человеческое описание строки журнала
 const AUDIT_WHAT = [[/^\/api\/login$/, 'вход в портал'], [/^\/api\/register$/, 'запрос первого входа'], [/^\/api\/invite\//, 'установка пароля по приглашению'],
@@ -6674,6 +6702,7 @@ async function hrInvite(employeeId) {
   if (!r.ok) return showToast(data.error || 'Не удалось выдать ссылку');
   state.hrAccounts = null;
   render();
+  if (data.sent) return showToast('Ссылка для входа отправлена на почту ' + (data.login || ''));   // почта работает — ссылку видит только сам сотрудник
   showInviteLink(data);
 }
 
