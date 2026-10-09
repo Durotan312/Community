@@ -1921,7 +1921,7 @@ function heroHtml() {
         <div class="home-top">
           <div class="home-top-text">
             <div class="home-date">${dateStr[0].toUpperCase() + dateStr.slice(1)} · ${greet}, Connected Home!</div>
-            <div class="home-motto">${escapeHtml(MOTTO).replace('в людях', '<em>в людях</em>')}</div>
+            <div class="home-motto">${escapeHtml(MOTTO).replace('людях', `<em onclick="goToView('org')" role="link" tabindex="0" onkeydown="if(event.key==='Enter')goToView('org')">людях</em>`)}</div>
           </div>
           <svg class="home-logo" viewBox="0 0 100 104" aria-hidden="true">
             <path d="M40 92H16q-8 0-8-8V37q0-6 5-9L44 8q6-4 12 0l31 20q5 3 5 9v47q0 8-8 8H60"/>
