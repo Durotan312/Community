@@ -13,6 +13,7 @@ const state = {
 // ico('calendar') → инлайн-SVG, размер = font-size родителя, цвет = currentColor.
 // =========================================================
 const ICONS = {
+  eye: '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>',
   robot: '<rect x="4" y="9" width="16" height="11" rx="3"/><circle cx="9" cy="14.5" r="1" fill="currentColor"/><circle cx="15" cy="14.5" r="1" fill="currentColor"/><path d="M12 9V5M12 5H9M1 13v4M23 13v4"/>',
   gitBranch: '<circle cx="6" cy="4" r="2.5"/><circle cx="6" cy="20" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 6.5v11M18 10.5c0 5-7 4-12 7"/>',
   code: '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
@@ -5760,6 +5761,7 @@ async function renderAdmin(main) {
   main.innerHTML = `
     <div class="section-head">
       <div><div class="section-title">Админ-панель</div></div>
+      <button class="btn secondary" onclick="toggleViewAs()">${ico('eye')} Смотреть как сотрудник</button>
     </div>
     <div class="subtabs admin-tabs">${tabs.map(([k, l]) => `<button class="subtab ${tab === k ? 'active' : ''}" onclick="state.adminTab='${k}';render()">${l}</button>`).join('')}</div>
     <div id="adminBody"><div class="loading">Загрузка…</div></div>`;
@@ -7516,13 +7518,10 @@ function updateThemeBtn(dark) {
 }
 // «Смотреть как сотрудник» (08.10.2026, просьба пользователя перед показом: «мне там нужен обычный доступ»).
 // Кнопка-глаз в шапке только у админа; в режиме сотрудника кнопка оранжевая, и сервер отвечает ему как сотруднику.
+// кнопка живёт в админ-панели («сделай как было, а глазик — в админ-панели»); в режиме сотрудника сверху тонкая полоса с возвратом
 function updateViewAsBtn() {
-  const b = document.getElementById('viewAsBtn');
-  if (!b) return;
-  const u = state.user;
-  b.hidden = !(u && (u.role === 'admin' || u.view_as));
-  b.classList.toggle('on', !!(u && u.view_as));
-  b.title = u && u.view_as ? 'Вернуться к правам администратора' : 'Смотреть как сотрудник';
+  const bar = document.getElementById('viewAsBar');
+  if (bar) bar.hidden = !(state.user && state.user.view_as);
 }
 async function toggleViewAs() {
   const on = !(state.user && state.user.view_as);

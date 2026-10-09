@@ -3593,5 +3593,6 @@ body.cw-mode .main{max-width:none;}
 .cw-denied p{color:var(--ink-soft);margin:0 0 18px;}
 .cw-denied .profile-actions{justify-content:center;}
 
-/* кнопка «Смотреть как сотрудник» в шапке (08.10.2026): включена — оранжевая */
-.view-as-btn.on{background:var(--orange);color:#fff;border-color:var(--orange);}
+/* полоса «Вы смотрите портал как сотрудник» (08.10.2026) */
+.view-as-bar{display:flex;align-items:center;justify-content:center;gap:14px;padding:8px 16px;background:var(--orange-tint);color:var(--orange-dark);font-weight:600;font-size:14px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.view-as-bar .btn{padding:6px 12px;font-size:13px;}
