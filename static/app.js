@@ -1892,8 +1892,8 @@ setInterval(() => {
 // девиз компании — слова пользователя 09.10.2026, дословно
 const MOTTO = 'Наша главная сила — в людях, а наши возможности ограничены только масштабом нашего мышления.';
 
-// Главная (вид выбран пользователем 09.10.2026 из присланных снимков): баннер с девизом и четырьмя цифрами
-// (персиковый в светлой теме, тёмный в тёмной; дуги убраны по его слову в тот же день). Ниже — подразделения сеткой: число, название, код.
+// Главная (вид выбран пользователем 09.10.2026 из присланных снимков): баннер с девизом, четырьмя цифрами
+// и фирменным знаком справа (белый в светлой теме, тёмный в тёмной; дуги и персиковый фон убраны по его слову в тот же день). Ниже — подразделения сеткой: число, название, код.
 // Кольцевая диаграмма, полоски и дерево были раньше и отвергнуты — не возвращать.
 function divisionCounts() {
   const counts = {};
@@ -1918,8 +1918,17 @@ function heroHtml() {
   return `
     <div class="home-hero">
       <div class="home-hero-in">
-        <div class="home-date">${dateStr[0].toUpperCase() + dateStr.slice(1)} · ${greet}, Connected Home!</div>
-        <div class="home-motto">${escapeHtml(MOTTO).replace('в людях', '<em>в людях</em>')}</div>
+        <div class="home-top">
+          <div class="home-top-text">
+            <div class="home-date">${dateStr[0].toUpperCase() + dateStr.slice(1)} · ${greet}, Connected Home!</div>
+            <div class="home-motto">${escapeHtml(MOTTO).replace('в людях', '<em>в людях</em>')}</div>
+          </div>
+          <svg class="home-logo" viewBox="0 0 100 104" aria-hidden="true">
+            <path d="M40 92H16q-8 0-8-8V37q0-6 5-9L44 8q6-4 12 0l31 20q5 3 5 9v47q0 8-8 8H60"/>
+            <path d="M38 80a17 17 0 0 1 24 0M29.500 71.500a29 29 0 0 1 41 0M21 63a41 41 0 0 1 58 0"/>
+            <circle cx="50" cy="92" r="9"/>
+          </svg>
+        </div>
         <div class="home-kpis">
           ${kpis.map(([n, label, view]) => `<div class="home-kpi" onclick="goToView(${jsArg(view)})"><b data-count="${n}">0</b><span>${label}</span></div>`).join('')}
         </div>

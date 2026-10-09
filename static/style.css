@@ -3726,13 +3726,13 @@ a.icon-btn{text-decoration:none;}
 }
 
 /* ===== главная: баннер с девизом и цифрами, подразделения сеткой (вид выбран пользователем 09.10.2026) ===== */
-.home-hero{border-radius:20px;margin-bottom:16px;background:#FFE2CC;border:1px solid #FFD3B5;color:var(--ink);}
+.home-hero{border-radius:20px;margin-bottom:16px;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow);color:var(--ink);}
 .home-hero-in{padding:38px 40px 34px;}
-.home-date{font-size:12.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--orange-dark);}
+.home-date{font-size:12.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--orange);}
 .home-motto{margin:18px 0 30px;font:800 32px/1.24 'Mulish',sans-serif;letter-spacing:-.015em;max-width:30ch;text-wrap:balance;}
-.home-motto em{font-style:normal;color:var(--orange-dark);white-space:nowrap;}
-.home-kpis{display:flex;flex-wrap:wrap;padding-top:24px;border-top:1px solid rgba(0,0,0,.12);}
-.home-kpi{flex:1 1 110px;padding:0 22px;border-left:1px solid rgba(0,0,0,.14);cursor:pointer;}
+.home-motto em{font-style:normal;color:var(--orange);white-space:nowrap;}
+.home-kpis{display:flex;flex-wrap:wrap;padding-top:24px;border-top:1px solid var(--border);}
+.home-kpi{flex:1 1 110px;padding:0 22px;border-left:1px solid var(--border);cursor:pointer;}
 .home-kpi:first-child{padding-left:0;border-left:0;}
 .home-kpi b{display:block;font:800 38px/1 'Mulish',sans-serif;font-variant-numeric:tabular-nums;transition:color .15s ease;}
 .home-kpi:hover b{color:var(--orange-dark);}
@@ -3740,6 +3740,17 @@ a.icon-btn{text-decoration:none;}
 html[data-theme="dark"] .home-hero{background:var(--surface);border-color:rgba(255,102,0,.4);}
 html[data-theme="dark"] .home-date,html[data-theme="dark"] .home-motto em,html[data-theme="dark"] .home-kpi:hover b{color:var(--orange);}
 html[data-theme="dark"] .home-kpi,html[data-theme="dark"] .home-kpis{border-color:rgba(255,255,255,.2);}
+/* фирменный знак справа от девиза */
+.home-top{display:flex;align-items:center;gap:28px;}
+.home-top-text{flex:1;min-width:0;}
+.home-logo{width:150px;height:156px;flex:none;margin-right:14px;}
+.home-logo path{fill:none;stroke:currentColor;stroke-width:8;stroke-linecap:round;stroke-linejoin:round;}
+.home-logo circle{fill:currentColor;}
+.home-logo{color:var(--orange);}                                  /* светлая тема: знак целиком оранжевый */
+html[data-theme="dark"] .home-logo{color:#B9BEC4;}                /* тёмная: дом серый, сигнал и точка оранжевые */
+html[data-theme="dark"] .home-logo path:nth-of-type(2){stroke:var(--orange);}
+html[data-theme="dark"] .home-logo circle{fill:var(--orange);}
+@media (max-width:700px){.home-logo{display:none;}}
 /* подразделения: число крупно, название и код рядом, тонкие линии вместо плашек */
 .home-divs{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface);border:1px solid var(--border);border-radius:16px;
   box-shadow:var(--shadow);overflow:hidden;margin-bottom:28px;}
