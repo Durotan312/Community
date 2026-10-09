@@ -3729,7 +3729,7 @@ a.icon-btn{text-decoration:none;}
 .home-hero{border-radius:20px;margin-bottom:16px;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow);color:var(--ink);}
 .home-hero-in{padding:38px 40px 34px;}
 .home-date{font-size:12.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--orange);}
-.home-motto{margin:18px 0 30px;font:600 32px/1.28 'Mulish',sans-serif;letter-spacing:-.01em;max-width:30ch;text-wrap:balance;}
+.home-motto{margin:18px 0 30px;font:700 32px/1.28 'Mulish',sans-serif;letter-spacing:-.01em;max-width:30ch;text-wrap:balance;}
 .home-motto em{font-style:normal;color:var(--orange);cursor:pointer;text-decoration:underline transparent;text-decoration-thickness:2px;text-underline-offset:6px;transition:text-decoration-color .15s ease;}
 .home-motto em:hover,.home-motto em:focus-visible{text-decoration-color:var(--orange);outline:none;}
 .home-kpis{display:flex;flex-wrap:wrap;padding-top:24px;border-top:1px solid var(--border);}
