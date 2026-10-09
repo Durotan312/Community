@@ -3786,3 +3786,12 @@ html[data-theme="dark"] .home-logo circle{fill:var(--orange);}
 @keyframes bookIn{from{transform:translateX(110%);opacity:0;}}
 @keyframes bookInBack{from{transform:translateX(-110%);opacity:0;}}
 @media (prefers-reduced-motion:reduce){.widget-book .book-by,.widget-book .book-body{animation:none!important;}}
+
+/* Двойное нажатие по кнопке без текста (смена темы, стрелки, свернуть меню) выделяло ближайшее слово на странице,
+   например «Агенты» в сайдбаре (09.10.2026, нашёл пользователь). Шапка, меню и все кнопки-переключатели текст не выделяют;
+   поля ввода остаются обычными. Новую кнопку-значок — в этот список. */
+.masthead,.nav-tabs,.sidenav,.sidenav-handle,.view-as-bar,button,.btn,.icon-btn,summary,.card-actions,.req-type,.att-table td[onclick],
+.subtabs,.subtab,.seg-group,.seg,.radio-pill,[class*="-chip"],[class*="-tabs"],[class$="-tab"],[class*="-tab "],[class*="-arrow"],[class*="-toggle"],[class*="-nav"],
+.modal-close,.cal-cell,.plan-area,.switch,.widget-more,img,svg,.lang-switch,.home-kpi,.home-div,.home-motto em,.widget-title,.book-dots,.toast{user-select:none;-webkit-user-select:none;}
+input,textarea,select,[contenteditable="true"]{user-select:text;-webkit-user-select:text;}
+body.no-select,body.no-select *{user-select:none!important;-webkit-user-select:none!important;}

@@ -355,6 +355,10 @@ function syncNavMenu() {
 function toggleSidenav() {
   const collapsed = document.body.classList.toggle('sidenav-collapsed');
   try { localStorage.setItem('cs_sidenav', collapsed ? '1' : '0'); } catch (e) {}
+  // ручка уезжает из-под мыши, и второе нажатие двойного щелчка попадало по странице и выделяло текст (09.10.2026)
+  document.body.classList.add('no-select');
+  clearTimeout(toggleSidenav._t);
+  toggleSidenav._t = setTimeout(() => document.body.classList.remove('no-select'), 500);
 }
 try { if (localStorage.getItem('cs_sidenav') === '1') document.body.classList.add('sidenav-collapsed'); } catch (e) {}
 
