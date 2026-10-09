@@ -3617,9 +3617,11 @@ body.cw-mode .main{max-width:none;}
 body.modal-open{overflow:hidden;}
 html{scrollbar-gutter:stable;}
 
-/* книга месяца — карточка одного размера для всех книг, чтобы стрелки не прыгали (09.10.2026) */
+/* книга месяца — карточка одного размера для всех книг: стрелки не прыгают, текст не вылезает и не обрезается (09.10.2026) */
 .book-by{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.widget-book .book-text{min-height:66px;}
-.widget-book .book-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
-.widget-book .book-author{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.widget-book.book-row .book-text{min-height:0;}
+.widget-book .book-text{min-height:80px;min-width:0;}
+.widget-book .book-title{overflow-wrap:break-word;}
+.widget-book .book-title.long{font-size:14px;line-height:1.25;}   /* длинное название — мельче, но целиком */
+.widget-book .book-author{overflow-wrap:break-word;}
+.widget-book.book-row .book-body{min-height:138px;}
+.widget-book.book-row .book-text{min-height:0;flex:1;min-width:0;}

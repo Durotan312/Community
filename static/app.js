@@ -646,7 +646,13 @@ function bookAutoStart() {
     bookShift(1, true);
   }, 5000);
 }
-function bookByLine(b) { return `Советует ${escapeHtml((b.by || '').split(' ').slice(-1)[0] || b.by || '')}${b.by_position ? ' · ' + escapeHtml(b.by_position.split(' — ')[0].split(' / ')[0]) : ''}`; }
+// короткая роль для подписи «Советует …»: CTO, COO, SDL, CEO — длинная должность в строку не влезает (09.10.2026)
+function bookRole(pos) {
+  let s = (pos || '').split(' — ')[0].split(' / ')[0].trim();
+  if (s.length > 12) { const m = s.match(/[A-Z]{2,5}/); s = m ? m[0] : (s === 'Генеральный директор' ? 'CEO' : s); }
+  return s;
+}
+function bookByLine(b) { const r = bookRole(b.by_position); return `Советует ${escapeHtml((b.by || '').split(' ').slice(-1)[0] || b.by || '')}${r ? ' · ' + escapeHtml(r) : ''}`; }
 function bookWidgetHtml() {
   const b = curBook();
   if (!b) return isStaff() ? `
@@ -662,7 +668,7 @@ function bookWidgetHtml() {
       <div class="book-body">
         ${b.cover ? `<img class="book-cover" src="${escapeHtml(b.cover)}" alt="${escapeHtml(b.title)}">` : `<div class="book-cover book-cover-empty"><span>${escapeHtml(b.title)}</span></div>`}
         <div class="book-text">
-          <div class="book-title book-link">${escapeHtml(b.title)}</div>
+          <div class="book-title book-link${b.title.length > 28 ? ' long' : ''}">${escapeHtml(b.title)}</div>
           ${b.author ? `<div class="book-author">${escapeHtml(b.author)}</div>` : ''}
         </div>
       </div>
