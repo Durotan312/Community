@@ -7720,13 +7720,6 @@ function renderSettings(main) {
     <div class="set-group">
       <div class="set-group-title">Правая колонка</div>
       ${toggle('showBirthdays', 'Дни рождения в ближайших событиях', 'Показывать дни рождения коллег в ленте «Ближайшие события»')}
-    </div>
-
-    <div class="set-group muted">
-      <div class="set-group-title">Появится с учётными записями</div>
-      <div class="set-row"><div><div class="set-label">Пароль и вход</div></div><span class="set-soon">скоро</span></div>
-      <div class="set-row"><div><div class="set-label">Уведомления</div></div><span class="set-soon">скоро</span></div>
-      <div class="set-row"><div><div class="set-label">Фото профиля</div></div><span class="set-soon">скоро</span></div>
     </div>`;
 }
 
