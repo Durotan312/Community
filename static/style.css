@@ -3756,3 +3756,15 @@ a.icon-btn{text-decoration:none;}
   .divs-name{margin-top:0;flex:1;min-width:0;}
 }
 @media (prefers-reduced-motion:reduce){.divs-tile{animation:none;}}
+
+/* книга месяца: смена свайпом — прежняя уезжает влево, новая въезжает справа (09.10.2026) */
+.widget-book{overflow:hidden;}
+.widget-book.book-out .book-by,.widget-book.book-out .book-body{animation:bookOut .26s ease-in forwards;}
+.widget-book.book-out-back .book-by,.widget-book.book-out-back .book-body{animation:bookOutBack .26s ease-in forwards;}
+.widget-book.book-in .book-by,.widget-book.book-in .book-body{animation:bookIn .42s cubic-bezier(.22,.8,.3,1) backwards;}
+.widget-book.book-in-back .book-by,.widget-book.book-in-back .book-body{animation:bookInBack .42s cubic-bezier(.22,.8,.3,1) backwards;}
+@keyframes bookOut{to{transform:translateX(-110%);opacity:0;}}
+@keyframes bookOutBack{to{transform:translateX(110%);opacity:0;}}
+@keyframes bookIn{from{transform:translateX(110%);opacity:0;}}
+@keyframes bookInBack{from{transform:translateX(-110%);opacity:0;}}
+@media (prefers-reduced-motion:reduce){.widget-book .book-by,.widget-book .book-body{animation:none!important;}}

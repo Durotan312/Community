@@ -629,13 +629,24 @@ function bookShift(d, auto) {                     // меняется тольк
   state.bookIdx = (state.bookIdx || 0) + d; curBook();
   const el = document.querySelector('.widget-book');
   if (!el) { render(); return; }
-  // размер карточки не пересчитываем: новая обложка получает те же ширину, высоту и режим, что у прежней — ничего не прыгает
-  const prev = el.querySelector('.book-cover'), row = el.classList.contains('book-row');
-  const size = prev ? { w: prev.style.width, h: prev.style.height } : null;
-  el.outerHTML = bookWidgetHtml();
-  const card = document.querySelector('.widget-book'), img = card && card.querySelector('.book-cover');
-  if (card && row) card.classList.add('book-row');
-  if (img && size) { img.style.width = size.w; img.style.height = size.h; }
+  // смена свайпом (09.10.2026, просьба пользователя: «не просто появляется новая, а как свайп справа налево и плавно»):
+  // прежняя книга уезжает влево, новая въезжает справа; по стрелке «назад» — наоборот
+  const back = d < 0;
+  el.classList.remove('book-in', 'book-in-back');
+  el.classList.add(back ? 'book-out-back' : 'book-out');
+  clearTimeout(bookShift._t);
+  bookShift._t = setTimeout(() => {
+    const cur = document.querySelector('.widget-book');
+    if (!cur) return;
+    // размер карточки не пересчитываем: новая обложка получает те же ширину, высоту и режим, что у прежней — ничего не прыгает
+    const prev = cur.querySelector('.book-cover'), row = cur.classList.contains('book-row');
+    const size = prev ? { w: prev.style.width, h: prev.style.height } : null;
+    cur.outerHTML = bookWidgetHtml();
+    const card = document.querySelector('.widget-book'), img = card && card.querySelector('.book-cover');
+    if (card && row) card.classList.add('book-row');
+    if (img && size) { img.style.width = size.w; img.style.height = size.h; }
+    if (card) card.classList.add(back ? 'book-in-back' : 'book-in');
+  }, 260);
   if (!auto) bookAutoStart();                       // после ручного клика отсчёт 5 секунд начинается заново
 }
 // книги листаются сами раз в 5 секунд (09.10.2026, просьба пользователя); наведение мышью, открытое окно
