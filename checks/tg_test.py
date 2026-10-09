@@ -75,7 +75,7 @@ with app.app.app_context():
     app._services_state = real
     tg = next(s for s in app._services_state(db) if s["key"] == "tg")
     check(tg["state"] == "ok" and ["Кому", "Темирлан А."] in tg["rows"], "карточка «Отчёты в Telegram» зелёная")
-# «хвосты»: список недоделанного — в админ-панели, по кнопке и в понедельничном отчёте
+# «хвосты»: список недоделанного — в панели администратора, по кнопке и в понедельничном отчёте
 tails = ADM.get("/api/admin/services").get_json()
 check(len(tails["tails"]) > 0 and all(t["text"] and t["kind"] for t in tails["tails"]), "хвосты отдаются во вкладку «Сервисы»")
 check("Не доделано" in app.tails_text() and "•" in app.tails_text() and len(app.tails_text()) < 4000, "текст хвостов для Telegram влезает в сообщение")

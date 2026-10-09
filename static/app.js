@@ -404,7 +404,7 @@ function render() {
   if (state.user && (state.user.cowork_only || isWorkflowEntry()) && state.view !== 'cowork' && canCowork()) state.view = 'cowork';   // отдельный вход — только WorkFlow
   if (state.view !== 'office') state.officeSearch = '';   // поиск по карте офиса живёт только внутри раздела
   if (state.view !== 'games' && typeof gamesLeave === 'function') { gamesLeave(); state.game = null; }
-  if (state.user) { updateRequestsBadge(); syncUrl(); }   // пункт «HR-панель» и счётчик — по роли; адрес — по разделу
+  if (state.user) { updateRequestsBadge(); syncUrl(); }   // пункт «Панель HR» и счётчик — по роли; адрес — по разделу
   updateCounts();
   renderSideWidgets();
   syncNavActive();   // подсветку пунктов держим по текущему разделу, а не по последнему клику
@@ -453,7 +453,7 @@ function render() {
   if (state.view === 'itsupport') { state.reqForm = 'it'; return goToView('requests'); }
   if (state.view === 'polls') return goHome();
   if (SOON_PAGES[state.view]) return renderSoon(main, SOON_PAGES[state.view]);
-  if (state.view === 'users') { state.adminTab = 'users'; return goToView('admin'); }   // учётки переехали в админ-панель
+  if (state.view === 'users') { state.adminTab = 'users'; return goToView('admin'); }   // учётки переехали в панель администратора
   if (state.view === 'admin') return isAdmin() ? renderAdmin(main) : goHome();
   if (state.view === 'profile') return renderProfile(main);
   if (state.view === 'settings') return renderSettings(main);
@@ -1564,12 +1564,12 @@ async function cwRenderSettings() {
     html = block('layers', 'Репозиторий', yes(true), row('Открытый код', `<a class="cw-link" href="${escapeHtml(s.repo)}" target="_blank" rel="noopener">${escapeHtml(s.repo)}</a>`)
       + row('Путь на сайт', 'Принятое изменение → закрытый репозиторий → сайт обновляется сам') + row('Правила для агентов', `<a class="cw-link" href="${escapeHtml(s.repo)}/blob/master/AGENTS.md" target="_blank" rel="noopener">AGENTS.md</a>`));
   } else if (cur === 'notify') {
-    html = block('bell', 'Telegram', '', row('Бот отчётов администратору', 'Настраивается в Админ-панели → Сервисы') + row('Новые изменения на проверку', 'Приходят владельцу, когда подключён исполнитель'));
+    html = block('bell', 'Telegram', '', row('Бот отчётов администратору', 'Настраивается в Панели администратора → Сервисы') + row('Новые изменения на проверку', 'Приходят владельцу, когда подключён исполнитель'));
   } else if (cur === 'dialogs') {
     const mine = (cw.tasks || []).filter(t => t.chat && t.chat.length);
     html = block('chat', 'Диалоги с приёмщиком', '', mine.length ? mine.map(t => `<div class="emp-profile-row"><span>${fmtShortDate(t.created)}</span><div>${cwProjectChip(t.project)}<a href="#" onclick="cwOpenTask(${jsArg(t.id)});return false;">${escapeHtml(t.title)}</a> · ${t.chat.length} сообщений</div></div>`).join('') : '<div class="empty"><strong>Диалогов пока нет</strong></div>');
   } else if (cur === 'security') {
-    html = block('lock', 'Вход и ключи', '', row('Вход в портал', 'Корпоративная учётная запись') + row('Вход в WorkFlow', state.user.cw_login ? escapeHtml(state.user.cw_login) : 'администратор') + (state.user.cw_login ? row('Пароль WorkFlow', '<button class="btn secondary" onclick="cwOpenPassword()">Сменить пароль WorkFlow</button>') : '') + row('Журнал действий', 'Админ-панель → Журнал действий'))
+    html = block('lock', 'Вход и ключи', '', row('Вход в портал', 'Корпоративная учётная запись') + row('Вход в WorkFlow', state.user.cw_login ? escapeHtml(state.user.cw_login) : 'администратор') + (state.user.cw_login ? row('Пароль WorkFlow', '<button class="btn secondary" onclick="cwOpenPassword()">Сменить пароль WorkFlow</button>') : '') + row('Журнал действий', 'Панель администратора → Журнал действий'))
       + block('shield', 'Ограничители исполнителя', '', row('Правка не публикуется, если в ней', escapeHtml((s.guardrails || []).join(', '))) + row('Куда пишет агент', 'Только в отдельную ветку wf/… — в основную ветку без кнопки «Принять» ничего не попадает'))
       + block('users', 'Учётки WorkFlow', `<button class="btn text" onclick="cwOpenAccountForm()">Добавить учётку</button>`, `<div class="cw-users">${(s.accounts || []).map(a => `<div class="emp-profile-row"><span>${escapeHtml(a.login)}</span><div>${escapeHtml(a.name || '')}${a.must_change ? ' · пароль ещё не сменён' : ''}${a.last_login ? ' · был ' + fmtShortDate(a.last_login) : ''} <button class="btn text" onclick="cwDeleteAccount(${jsArg(a.login)})">Удалить</button></div></div>`).join('') || '<div class="empty"><strong>Учёток пока нет</strong></div>'}</div>`);
   }
@@ -3659,7 +3659,7 @@ async function renderVacation(main) {
     `;
 }
 
-// Остатки отпусков всех сотрудников — вкладка «Отпуск» HR-панели, только HR и админ (09.10.2026, слова пользователя:
+// Остатки отпусков всех сотрудников — вкладка «Отпуск» панели HR, только HR и админ (09.10.2026, слова пользователя:
 // «HR может видеть остаток отпусков и я как админ»). Сервер остальным ролям отвечает отказом. Блок no-tr.
 async function renderHrBalances() {
   const box = document.getElementById('hrBalances');
@@ -4583,10 +4583,10 @@ async function renderUsers(main) {
     </div>
     <div class="users-legend">
       <div><b>Администратор</b> — может добавлять и удалять любые данные портала.</div>
-      <div><b>HR</b> — HR-панель: заявки на командировки, обращения, справочник, новости и ивенты.</div>
-      <div><b>Закупщик</b> — панель закупщика: заявки сотрудников на технику и оборудование.</div>
-      <div><b>Бухгалтер</b> — панель бухгалтера: заявки сотрудников на компенсацию по чекам.</div>
-      <div><b>Финансовый директор</b> — видит панель закупщика и панель бухгалтера, ничего в них не меняет.</div>
+      <div><b>HR</b> — панель HR: заявки на командировки, обращения, справочник, новости и ивенты.</div>
+      <div><b>Закупщик</b> — панель закупок: заявки сотрудников на технику и оборудование.</div>
+      <div><b>Бухгалтер</b> — панель бухгалтерии: заявки сотрудников на компенсацию по чекам.</div>
+      <div><b>Финансовый директор</b> — видит панель закупок и панель бухгалтерии, ничего в них не меняет.</div>
       <div><b>Сотрудник</b> — смотрит разделы, спрашивает бота, пишет предложения и комментарии.</div>
       <div>Новому человеку удобнее выслать <b>ссылку-приглашение</b>: он сам придумает пароль и войдёт по корпоративной почте.</div>
     </div>
@@ -4639,7 +4639,7 @@ async function openUserForm(id) {
       <div class="field"><label>Роль</label>
         <select id="uRole">
           <option value="user" ${!u || u.role === 'user' ? 'selected' : ''}>Сотрудник — только просмотр</option>
-          <option value="hr" ${u && u.role === 'hr' ? 'selected' : ''}>HR — HR-панель, новости и ивенты</option>
+          <option value="hr" ${u && u.role === 'hr' ? 'selected' : ''}>HR — панель HR, новости и ивенты</option>
           <option value="buyer" ${u && u.role === 'buyer' ? 'selected' : ''}>Закупщик — заявки на технику</option>
           <option value="accountant" ${u && u.role === 'accountant' ? 'selected' : ''}>Бухгалтер — компенсации по чекам</option>
           <option value="cfo" ${u && u.role === 'cfo' ? 'selected' : ''}>Финансовый директор — просмотр закупок и бухгалтерии</option>
@@ -4902,7 +4902,7 @@ const EQUIP_FORM = [
 ];
 
 // Виды заявок. Новый вид = схема формы + запись здесь + тип в REQUEST_TYPES на сервере.
-// ---- заявка в поддержку IT: уходит администратору (админ-панель → «Поддержка IT») ----
+// ---- заявка в поддержку IT: уходит администратору (панель администратора → «Поддержка IT») ----
 const IT_CATEGORIES = [['pc', 'Компьютер / ноутбук'], ['net', 'Интернет, Wi-Fi, VPN'], ['mail', 'Почта и учётные записи'],
   ['soft', 'Программы и лицензии'], ['print', 'Принтер, сканер'], ['access', 'Доступы и пропуска'], ['other', 'Другое']];
 const IT_FORM = [
@@ -5411,10 +5411,10 @@ function renderRequests(main) {
 
     <div class="req-list-title">Мои заявки
       <span class="req-links">
-        ${isStaff() ? `<a class="req-hr-link" href="#" onclick="openHr('requests');return false;">Командировки всех — в HR-панели →</a>` : ''}
-        ${seesBuyer() ? `<a class="req-hr-link" href="#" onclick="goToView('buyer');return false;">Заявки на технику — в панели закупщика →</a>` : ''}
-        ${seesAccountant() ? `<a class="req-hr-link" href="#" onclick="goToView('accountant');return false;">Компенсации по чекам — в панели бухгалтера →</a>` : ''}
-        ${isAdmin() ? `<a class="req-hr-link" href="#" onclick="openAdmin('support');return false;">Поддержка IT — в админ-панели →</a>` : ''}
+        ${isStaff() ? `<a class="req-hr-link" href="#" onclick="openHr('requests');return false;">Командировки всех — в панели HR →</a>` : ''}
+        ${seesBuyer() ? `<a class="req-hr-link" href="#" onclick="goToView('buyer');return false;">Заявки на технику — в панели закупок →</a>` : ''}
+        ${seesAccountant() ? `<a class="req-hr-link" href="#" onclick="goToView('accountant');return false;">Компенсации по чекам — в панели бухгалтерии →</a>` : ''}
+        ${isAdmin() ? `<a class="req-hr-link" href="#" onclick="openAdmin('support');return false;">Поддержка IT — в панели администратора →</a>` : ''}
       </span>
     </div>
 
@@ -5791,7 +5791,7 @@ async function deleteWelcomeVideo() {
 }
 
 // =========================================================
-// ОБЪЯВЛЕНИЕ НА ГЛАВНОЙ — одна плашка; ставит и снимает HR или админ из HR-панели
+// ОБЪЯВЛЕНИЕ НА ГЛАВНОЙ — одна плашка; ставит и снимает HR или админ из панели HR
 // =========================================================
 function announcementHtml() {
   const a = state.announcement || {};
@@ -5807,7 +5807,7 @@ function announcementHtml() {
     </div>`;
 }
 
-// карточка в HR-панели
+// карточка в панели HR
 function announcementAdminHtml() {
   const a = state.announcement || {};
   return `
@@ -5897,7 +5897,7 @@ const AUDIT_WHAT = [[/^\/api\/login$/, 'вход в портал'], [/^\/api\/re
   [/^\/api\/suggestions/, 'обращение'], [/^\/api\/news\/.+\/comments$/, 'комментарий'], [/^\/api\/news\/.+\/pin$/, 'закрепление новости'],
   [/^\/api\/news/, 'новость'], [/^\/api\/gallery\/photos/, 'фото ивента'], [/^\/api\/gallery/, 'ивент'], [/^\/api\/upload$/, 'загрузка файла'],
   [/^\/api\/employees/, 'сотрудника'], [/^\/api\/events/, 'событие'], [/^\/api\/projects/, 'проект'], [/^\/api\/partners/, 'партнёра'],
-  [/^\/api\/honors/, 'запись доски почёта'], [/^\/api\/faq/, 'вопрос-ответ'], [/^\/api\/onboarding/, 'шаг для новичков'], [/^\/api\/tasks/, 'задача'], [/^\/api\/hr\//, 'HR-панель'], [/^\/api\/admin\//, 'админ-панель']];
+  [/^\/api\/honors/, 'запись доски почёта'], [/^\/api\/faq/, 'вопрос-ответ'], [/^\/api\/onboarding/, 'шаг для новичков'], [/^\/api\/tasks/, 'задача'], [/^\/api\/hr\//, 'Панель HR'], [/^\/api\/admin\//, 'панель администратора']];
 function auditText(a) {
   const what = (AUDIT_WHAT.find(([re]) => re.test(a.path)) || [0, a.path])[1];
   const standalone = /вход|запрос|установка|смена|отмена|закрепление|загрузка|приглашение|проверочное/.test(what);
@@ -5914,7 +5914,7 @@ async function renderAdmin(main) {
   const tabs = [['support', 'Поддержка IT'], ['late', 'Опоздания'], ['cabinets', 'Кабинеты руководителей'], ['users', 'Учётные записи и роли'], ['status', 'Состояние системы'], ['services', 'Сервисы'], ['agents', 'Агенты'], ['audit', 'Журнал действий'], ['backups', 'Резервные копии']];
   main.innerHTML = `
     <div class="section-head">
-      <div><div class="section-title">Админ-панель</div></div>
+      <div><div class="section-title">Панель администратора</div></div>
       <button class="btn secondary" onclick="toggleViewAs()">${ico('eye')} Смотреть как сотрудник</button>
     </div>
     <div class="subtabs admin-tabs">${tabs.map(([k, l]) => `<button class="subtab ${tab === k ? 'active' : ''}" onclick="state.adminTab='${k}';render()">${l}</button>`).join('')}</div>
@@ -5931,7 +5931,7 @@ async function renderAdmin(main) {
   if (tab === 'backups') return renderAdminBackups(body);
 }
 
-// ---- админ-панель → «Опоздания»: проходы турникета и их состояние.
+// ---- панель администратора → «Опоздания»: проходы турникета и их состояние.
 // У HR этого нет: ей каждый понедельник приходит готовый отчёт письмом (решение пользователя 21.09.2026).
 async function renderAdminLate(body) {
   const late = await fetchJson('/api/hr/lateness' + (state.hrWeek ? '?start=' + state.hrWeek : '')) || { late: [], excused: [], has_passes: false, unmapped: 0 };
@@ -5944,7 +5944,7 @@ async function renderAdminLate(body) {
     ${hrLatenessHtml(late)}`;
 }
 
-// ---- админ-панель → «Кабинеты руководителей»: тот же кабинет, но глазами любого из глав подразделений ----
+// ---- панель администратора → «Кабинеты руководителей»: тот же кабинет, но глазами любого из глав подразделений ----
 async function renderAdminCabinets(body) {
   const heads = state.employees.filter(e => Number(e.is_head)).sort((a, b) => (a.department || '').localeCompare(b.department || '', 'ru'));
   if (!heads.length) { body.innerHTML = '<div class="empty"><strong>Руководители подразделений не отмечены</strong></div>'; return; }
@@ -5958,7 +5958,7 @@ async function renderAdminCabinets(body) {
   await renderManagerInto(document.getElementById('mgrBox'), state.adminCab);
 }
 
-// ---- админ-панель → «Поддержка IT»: заявки сотрудников, устроено как панель закупщика ----
+// ---- панель администратора → «Поддержка IT»: заявки сотрудников, устроено как панель закупок ----
 function renderAdminSupport(body) {
   const all = (state.requests || []).filter(r => r.type === 'it');
   const groups = { new: all.filter(r => r.status === 'new'), work: all.filter(r => r.status === 'in_progress'), all };
@@ -6071,7 +6071,7 @@ async function renderAdminServices(body) {
   drawHrBotBox();
 }
 
-// ---- админ-панель → «Агенты» (06.10.2026, просьба пользователя: «название агента, за что он отвечает, что делает сейчас
+// ---- панель администратора → «Агенты» (06.10.2026, просьба пользователя: «название агента, за что он отвечает, что делает сейчас
 // и что было сделано»). Агенты работают на компьютере пользователя и сами отмечают начало и конец работы
 // (checks/agent_log.py); здесь только показываем. Пока вкладка открыта, она обновляется раз в полминуты.
 const AGENT_RUN = { done: ['Сделано', 'ok'], failed: ['Не получилось', 'bad'], running: ['Работает', 'warn'], lost: ['Не отметил конец', 'off'] };
@@ -6169,7 +6169,7 @@ async function drawStaffBotBox() {
   drawMyTelegram('myTgAdmin');
 }
 // Бот для HR (06.10.2026): отчёт об опозданиях по понедельникам вместо письма и дни рождения сотрудников в сам день.
-// Токен вставляет админ здесь; свой Telegram HR подключает в HR-панели (drawHrTelegram).
+// Токен вставляет админ здесь; свой Telegram HR подключает в панели HR (drawHrTelegram).
 async function drawHrBotBox() {
   const box = document.getElementById('hrBotBox');
   if (!box) return;
@@ -6200,7 +6200,7 @@ async function hrBotDisconnect() {
   if (!confirm('Отключить бота для HR? Отчёт об опозданиях снова будет приходить письмом, напоминания о днях рождения прекратятся.')) return;
   if (await tgRequest('/api/admin/hrbot', 'DELETE')) render();
 }
-// Свой Telegram у бота HR — для HR и админа (блок в HR-панели и в блоке бота на вкладке «Сервисы»)
+// Свой Telegram у бота HR — для HR и админа (блок в панели HR и в блоке бота на вкладке «Сервисы»)
 async function drawHrTelegram(boxId) {
   const box = document.getElementById(boxId);
   if (!box) return;
@@ -6465,7 +6465,7 @@ async function elpassSyncNow() {
   state.elpass = null; state.employees = await fetchJson('/api/employees') || state.employees; render();
 }
 
-// HR-панель → «Опоздания»: проходы elpass × график × отметки табеля. Считает сервер (compute_lateness).
+// Панель HR → «Опоздания»: проходы elpass × график × отметки табеля. Считает сервер (compute_lateness).
 function hrLatenessHtml(L, opts = {}) {
   const codeName = Object.fromEntries(L.codes || []);
   const weekVar = opts.weekVar || 'hrWeek';          // кабинет руководителя листает недели своей переменной
@@ -6506,7 +6506,7 @@ function hrLatenessHtml(L, opts = {}) {
     ${L.excused.length ? `<div class="late-title">С причиной в табеле — ${L.excused.length}</div><div class="hr-table">${L.excused.slice().sort(byDate).map(x => row(x, true)).join('')}</div>` : ''}`;
 }
 
-// HR-панель → «Посещаемость за неделю»: кто и когда отсутствовал, с причинами. Сгруппировано по сотрудникам.
+// Панель HR → «Посещаемость за неделю»: кто и когда отсутствовал, с причинами. Сгруппировано по сотрудникам.
 function hrAttendanceWeekHtml(week) {
   const codeName = Object.fromEntries(week.codes || []);
   const fmt = iso => new Date(iso + 'T00:00:00').toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -6635,7 +6635,7 @@ async function renderHr(main) {
 
   main.innerHTML = `
     <div class="section-head">
-      <div><div class="section-title">HR-панель</div></div>
+      <div><div class="section-title">Панель HR</div></div>
       <div class="hr-quick">
         <button class="btn secondary" onclick="goToView('news');openNewsForm(null,'newcomer')">Представить сотрудника</button>
         <button class="btn" onclick="goToView('news');openNewsForm()">Новость</button>
@@ -6777,7 +6777,7 @@ function renderBuyer(main) {
 
   main.innerHTML = `
     <div class="section-head">
-      <div><div class="section-title">Панель закупщика</div></div>
+      <div><div class="section-title">Панель закупок</div></div>
     </div>
     <div class="hr-tiles">
       ${tile('new', groups.new.length, urgent ? `новых, из них срочных: ${urgent}` : 'новых заявок', groups.new.length > 0)}
@@ -6792,8 +6792,8 @@ function renderBuyer(main) {
     </div>`;
 }
 
-// ---- Панель бухгалтера (06.10.2026, просьба пользователя: «создай панель бухгалтера с доступом только для бухгалтеров»).
-// По образцу панели закупщика: роль accountant, вид заявки compensation. Заявки приходят всей бухгалтерии сразу,
+// ---- Панель бухгалтерии (06.10.2026, просьба пользователя: «создай панель бухгалтерии с доступом только для бухгалтеров»).
+// По образцу панели закупок: роль accountant, вид заявки compensation. Заявки приходят всей бухгалтерии сразу,
 // без согласования руководителем (его выбор). «Пока» в панели один вид заявок — остальное добавится позже.
 function renderAccountant(main) {
   const all = (state.requests || []).filter(r => r.type === 'compensation');
@@ -6819,7 +6819,7 @@ function renderAccountant(main) {
   const empty = { new: 'Новых заявок нет', work: 'В работе ничего нет', paid: 'Выплаченных пока нет', all: 'Заявок пока не было' }[tab];
   main.innerHTML = `
     <div class="section-head">
-      <div><div class="section-title">Панель бухгалтера</div></div>
+      <div><div class="section-title">Панель бухгалтерии</div></div>
     </div>
     <div class="hr-tiles">
       ${tile('new', groups.new.length, 'новых заявок', groups.new.length > 0)}
@@ -7675,7 +7675,7 @@ function updateThemeBtn(dark) {
 }
 // «Смотреть как сотрудник» (08.10.2026, просьба пользователя перед показом: «мне там нужен обычный доступ»).
 // Кнопка-глаз в шапке только у админа; в режиме сотрудника кнопка оранжевая, и сервер отвечает ему как сотруднику.
-// кнопка живёт в админ-панели («сделай как было, а глазик — в админ-панели»); в режиме сотрудника сверху тонкая полоса с возвратом
+// кнопка живёт в панели администратора («сделай как было, а глазик — в панели администратора»); в режиме сотрудника сверху тонкая полоса с возвратом
 function updateViewAsBtn() {
   const bar = document.getElementById('viewAsBar');
   if (bar) bar.hidden = !(state.user && state.user.view_as);
@@ -8465,7 +8465,7 @@ function renderSuggestions(main) {
       </div>
     </div>
     <div class="req-list-title">Мои обращения
-      ${isStaff() ? `<a class="req-hr-link" href="#" onclick="openHr('suggestions');return false;">Обращения всех сотрудников — в HR-панели →</a>` : ''}
+      ${isStaff() ? `<a class="req-hr-link" href="#" onclick="openHr('suggestions');return false;">Обращения всех сотрудников — в панели HR →</a>` : ''}
     </div>
     ${mine.length ? mine.map(s => `
       <div class="suggestion-card">

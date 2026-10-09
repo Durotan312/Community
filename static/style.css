@@ -3666,3 +3666,12 @@ html{scrollbar-gutter:stable;}
 .modal .vac-balance{border:0;padding:0;margin:0;}
 .hr-bal-top input{padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;}
 .hr-bal-top input:focus{outline:none;border-color:var(--orange);}
+/* счётчик в меню — на углу значка (09.10.2026): длинные названия («Панель администратора», «Кабинет руководителя») не обрезаются */
+@media (min-width:1101px){
+  /* пункты чуть шире за счёт полей меню: «Панель администратора» (169px) помещается целиком */
+  body:not(.sidenav-collapsed) .sidenav{padding-left:6px;padding-right:6px;}
+  body:not(.sidenav-collapsed) .nav-item.side{padding-left:8px;padding-right:4px;gap:8px;}   /* запас 6px на разницу шрифтов в браузерах */
+  body:not(.sidenav-collapsed) .sidenav-title{padding-left:10px;padding-right:10px;}
+  body:not(.sidenav-collapsed) .nav-item.side > .side-badge{position:absolute;left:19px;top:1px;margin:0;min-width:15px;height:15px;padding:0 3px;font-size:9.5px;box-shadow:0 0 0 2px var(--bg);}
+  body:not(.sidenav-collapsed) .nav-item.side.active > .side-badge{background:#fff;color:var(--orange);box-shadow:none;}
+}
