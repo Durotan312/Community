@@ -1878,6 +1878,9 @@ setInterval(() => {
   if (['00:00', '05:00', '12:00', '18:00'].includes(now.hm) && state.view === 'home') render();
 }, 1000);
 
+// девиз компании — слова пользователя 09.10.2026, дословно
+const MOTTO = 'Наша главная сила — в людях, а наши возможности ограничены только масштабом нашего мышления.';
+
 function heroHtml() {
   const now = new Date();
   const ast = astanaNow();
@@ -1910,71 +1913,52 @@ function heroHtml() {
       <div class="hero-text">
         <div class="hero-date">${dateStr[0].toUpperCase() + dateStr.slice(1)}</div>
         <div class="hero-title">${greet}, Connected Home!</div>
-        <div class="hero-sub">${bdText || 'Здесь всё, что происходит в компании: новости, люди, проекты и помощник, который ответит на любой вопрос.'}</div>
-        ${evChip}
+        <div class="hero-motto">${escapeHtml(MOTTO)}</div>
+        <div class="hero-chips">${bdText ? `<div class="hero-chip" onclick="goToView('people')">${bdText}</div>` : ''}${evChip}</div>
       </div>
       <!-- цифры компании живут в дереве ниже, чтобы не дублировать их дважды на одном экране -->
     </div>`;
 }
 
-// «Компания в цифрах»: кольцевая диаграмма по подразделениям + разбивка списком.
-// Сегменты кольца «прорисовываются» по очереди (анимация stroke-dasharray), строки списка проявляются следом.
-const DIV_SHADES = ['#C24E00', '#E05E00', '#FF6B00', '#FF8330', '#FF9B57', '#FFB27E', '#FFC9A5', '#FFDCC2'];
-
+// «Компания в цифрах» (09.10.2026, слова пользователя: «вместо круга… сделай по-другому, я посмотрю»):
+// четыре крупные цифры и плитки подразделений. Кольцо убрано; полоски и дерево отвергнуты раньше — не возвращать.
 function statsHtml() {
   const counts = {};
   state.employees.forEach(e => {
     const d = e.department;
-    if (!d || d === 'Без отдела') return;   // «Руководство» тоже считаем, иначе сумма кольца не сойдётся с общим числом
+    if (!d || d === 'Без отдела') return;
     counts[d] = (counts[d] || 0) + 1;
   });
   const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   if (!rows.length) return '';
-  const total = rows.reduce((sum, [, n]) => sum + n, 0);
   const code = Object.fromEntries((typeof DIVISIONS !== 'undefined' ? DIVISIONS : []).map(([n, c]) => [n, c]));
-
-  let acc = 0;
-  const segments = rows.map(([name, n], i) => {
-    const pct = n / total * 100;
-    const seg = `<circle class="donut-seg" cx="100" cy="100" r="66" stroke="${DIV_SHADES[i % DIV_SHADES.length]}"
-      stroke-dasharray="${pct.toFixed(2)} ${(100 - pct).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}"
-      pathLength="100" style="animation-delay:${(i * 0.12).toFixed(2)}s"><title>${escapeHtml(name)} — ${n}</title></circle>`;
-    acc += pct;
-    return seg;
-  }).join('');
-
-  const legend = rows.map(([name, n], i) => `
-    <div class="div-row${code[name] ? '' : ' no-code'}" style="animation-delay:${(0.35 + i * 0.07).toFixed(2)}s"
-         onclick="state.orgCollapsed=null;goToView('org');setTimeout(()=>openOrgDiv(${jsArg(name)}),50)">
-      <span class="div-dot" style="background:${DIV_SHADES[i % DIV_SHADES.length]}"></span>
-      ${code[name] ? `<span class="org-code">${escapeHtml(code[name])}</span>` : ''}
-      <span class="div-name">${escapeHtml(name)}</span>
-      <span class="div-pct">${Math.round(n / total * 100)}%</span>
-      <span class="div-num">${n}</span>
-    </div>`).join('');
-
-  const parts = [
-    `${state.employees.length} ${pluralRu(state.employees.length, 'сотрудник', 'сотрудника', 'сотрудников')}`,
-    `${rows.length} ${pluralRu(rows.length, 'подразделение', 'подразделения', 'подразделений')}`,
-    `${state.projects.length} ${pluralRu(state.projects.length, 'проект', 'проекта', 'проектов')}`,
-  ];
+  const staff = state.employees.length, parts = state.partners.length;
+  const kpis = [
+    [staff, pluralRu(staff, 'сотрудник', 'сотрудника', 'сотрудников'), 'people'],
+    [rows.length, pluralRu(rows.length, 'подразделение', 'подразделения', 'подразделений'), 'org'],
+    [state.projects.length, pluralRu(state.projects.length, 'проект', 'проекта', 'проектов'), 'projects'],
+    [parts, pluralRu(parts, 'партнёр', 'партнёра', 'партнёров'), 'partners'],
+  ].filter(k => k[0] > 0);
 
   return `
     <div class="stats">
-      <div class="stats-head">
-        <div class="stats-title">Компания в цифрах</div>
-        <div class="stats-sub">${parts.join(' · ')}</div>
+      <div class="stats-title">Компания в цифрах</div>
+      <div class="kpi-row">
+        ${kpis.map(([n, label, view]) => `
+          <div class="kpi" onclick="goToView(${jsArg(view)})">
+            <b data-count="${n}">0</b><span>${label}</span>
+          </div>`).join('')}
       </div>
-      <div class="div-wrap">
-        <svg class="donut" viewBox="0 0 200 200" role="img" aria-label="Распределение сотрудников по подразделениям">
-          <g transform="rotate(-90 100 100)">
-            <circle class="donut-bg" cx="100" cy="100" r="66"/>
-            ${segments}
-          </g>
-          <text class="donut-total" x="100" y="97" text-anchor="middle" data-count="${total}">0</text>
-          <text class="donut-cap" x="100" y="118" text-anchor="middle">${pluralRu(total, 'сотрудник', 'сотрудника', 'сотрудников')}</text>
-        </svg>
-        <div class="div-list">${legend}</div>
+      <div class="divs-grid">
+        ${rows.map(([name, n], i) => `
+          <div class="divs-tile" style="animation-delay:${(0.15 + i * 0.05).toFixed(2)}s"
+               onclick="state.orgCollapsed=null;goToView('org');setTimeout(()=>openOrgDiv(${jsArg(name)}),50)">
+            <div class="divs-top">
+              <span class="org-code">${escapeHtml(code[name] || 'CEO')}</span>
+              <b>${n}</b>
+            </div>
+            <div class="divs-name">${escapeHtml(name)}</div>
+          </div>`).join('')}
       </div>
     </div>`;
 }
