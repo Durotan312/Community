@@ -468,6 +468,7 @@ function openLightbox(url, urls) {
 
   const wrap = document.createElement('div');
   wrap.className = 'lightbox-overlay';
+  document.body.classList.add('modal-open');
   wrap.innerHTML = `
     <button class="lightbox-close" title="Закрыть (Esc)">&times;</button>
     ${many ? `<button class="lightbox-nav prev" title="Предыдущее (←)">&#8249;</button>
@@ -484,7 +485,7 @@ function openLightbox(url, urls) {
     // подгружаем соседей заранее, чтобы листалось без задержки
     [idx + 1, idx - 1].forEach(j => { const p = new Image(); p.src = list[(j + list.length) % list.length]; });
   };
-  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey); };
+  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey); if (!document.getElementById('modalOverlay')) document.body.classList.remove('modal-open'); };
   const onKey = (e) => {
     if (e.key === 'Escape') close();
     else if (many && e.key === 'ArrowRight') show(idx + 1);
@@ -619,7 +620,13 @@ function inboxWidgetHtml() {
 // 09.10.2026: книги от всех руководителей, листаются стрелками (слова пользователя: «не только от CEO, но и от директоров,
 // чтобы можно было листать и смотреть, какой директор какую книгу советует»). Текущая — state.bookIdx.
 function curBook() { const list = state.books || []; if (!list.length) return null; state.bookIdx = ((state.bookIdx || 0) % list.length + list.length) % list.length; return list[state.bookIdx]; }
-function bookShift(d) { state.bookIdx = (state.bookIdx || 0) + d; render(); }
+function bookShift(d) {                           // меняется только блок книги, страница не перерисовывается (09.10.2026)
+  state.bookIdx = (state.bookIdx || 0) + d; curBook();
+  const el = document.querySelector('.widget-book');
+  if (!el) { render(); return; }
+  el.outerHTML = bookWidgetHtml();
+  fitBookCover();
+}
 function bookByLine(b) { return `Советует ${escapeHtml((b.by || '').split(' ').slice(-1)[0] || b.by || '')}${b.by_position ? ' · ' + escapeHtml(b.by_position.split(' — ')[0].split(' / ')[0]) : ''}`; }
 function bookWidgetHtml() {
   const b = curBook();
@@ -953,7 +960,7 @@ function openSearch() {
         
       </div>
     </div>`;
-  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey); };
+  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey); if (!document.getElementById('modalOverlay')) document.body.classList.remove('modal-open'); };
   const onKey = e => { if (e.key === 'Escape') close(); };
   wrap.addEventListener('click', e => { if (e.target === wrap) close(); });
   document.addEventListener('keydown', onKey);
@@ -8746,12 +8753,14 @@ function openModal(html) {
   };
   document.addEventListener('keydown', wrap._onKey);
   document.body.appendChild(wrap);
+  document.body.classList.add('modal-open');      // страница под окном не крутится колесиком (09.10.2026, просьба пользователя)
 }
 function closeModal() {
   const el = document.getElementById('modalOverlay');
   if (!el) return;
   if (el._onKey) document.removeEventListener('keydown', el._onKey);
   el.remove();
+  document.body.classList.remove('modal-open');
 }
 
 

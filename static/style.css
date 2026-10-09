@@ -3612,3 +3612,7 @@ body.cw-mode .main{max-width:none;}
 .widget-book.book-row .book-cover-empty{width:92px;height:138px;font-size:12px;padding:8px;}
 .people-leaders .leader-excerpt{font-size:13px;color:var(--ink-soft);line-height:1.45;}
 .people-leaders-head{margin-top:4px;}
+
+/* открыто окно — страница под ним не прокручивается (09.10.2026) */
+body.modal-open{overflow:hidden;}
+html{scrollbar-gutter:stable;}
