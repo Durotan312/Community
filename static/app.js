@@ -3659,6 +3659,46 @@ async function renderVacation(main) {
     `;
 }
 
+// Остатки отпусков всех сотрудников — вкладка «Отпуск» HR-панели, только HR и админ (09.10.2026, слова пользователя:
+// «HR может видеть остаток отпусков и я как админ»). Сервер остальным ролям отвечает отказом. Блок no-tr.
+async function renderHrBalances() {
+  const box = document.getElementById('hrBalances');
+  if (!box) return;
+  const list = await fetchJson('/api/hr/vacation-balances');
+  if (!document.getElementById('hrBalances')) return;
+  if (!list) { box.innerHTML = '<div class="empty"><strong>Не удалось загрузить</strong></div>'; return; }
+  if (!list.length) { box.innerHTML = '<div class="empty"><strong>Остатки не загружены</strong></div>'; return; }
+  state._hrBalances = list;
+  const q = (state.hrBalSearch || '').trim().toLowerCase();
+  const shown = list.filter(p => !q || p.name.toLowerCase().includes(q) || (p.department || '').toLowerCase().includes(q));
+  box.innerHTML = `
+    <div class="hr-bal-top"><input type="text" id="hrBalSearch" placeholder="Поиск…" value="${escapeHtml(state.hrBalSearch || '')}" oninput="state.hrBalSearch=this.value;hrBalFilter()">
+      <span class="hr-bal-date">данные на ${fmtDate(list[0].as_of)} · сотрудников: ${list.length}</span></div>
+    <div class="hr-table" id="hrBalRows">${hrBalRowsHtml(shown)}</div>`;
+}
+function hrBalRowsHtml(shown) {
+  return shown.map(p => `
+    <div class="hr-row hr-bal-row" onclick="openHrBalance(${jsArg(p.employee_id)})" role="button">
+      <div class="org-ava" style="--h:${hueOf(p.name)}">${initials(p.name)}</div>
+      <div class="hr-row-main"><div class="hr-row-name">${escapeHtml(p.name)}</div><div class="hr-row-sub">${escapeHtml(p.department || '')}</div></div>
+      <div class="hr-chips">${p.items.map(it => `<span class="hr-chip hr-bal-chip">${p.items.length > 1 && it.company ? escapeHtml(it.company) + ' · ' : ''}<b>${escapeHtml(String(it.total))}</b> ${pluralRu(Math.abs(Number(it.total)) || 0, 'день', 'дня', 'дней')}</span>`).join('')}</div>
+    </div>`).join('') || '<div class="empty"><strong>Никого не нашли</strong></div>';
+}
+function hrBalFilter() {
+  const q = (state.hrBalSearch || '').trim().toLowerCase(), rows = document.getElementById('hrBalRows');
+  if (rows) rows.innerHTML = hrBalRowsHtml((state._hrBalances || []).filter(p => !q || p.name.toLowerCase().includes(q) || (p.department || '').toLowerCase().includes(q)));
+}
+function openHrBalance(id) {
+  const p = (state._hrBalances || []).find(x => x.employee_id === id);
+  if (!p) return;
+  openModal(`
+    <div class="modal req-modal">
+      <div class="modal-head"><h3>${escapeHtml(p.name)}</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
+      <div class="modal-body">${vacBalanceHtml({ as_of: p.as_of, items: p.items }, '')}</div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal()">Закрыть</button></div>
+    </div>`);
+}
+
 // Остаток отпуска по данным отдела кадров (09.10.2026). КОНФИДЕНЦИАЛЬНО: сервер отдаёт только свой остаток.
 // Блок помечен no-tr — цифры не уходят в общий кэш переводов.
 function vacBalanceHtml(b, askHandler) {
@@ -3681,7 +3721,7 @@ function vacBalanceHtml(b, askHandler) {
             ${it.periods.map(p => `<div class="vac-bal-row"><span>${d(p.start)} — ${d(p.end)}</span><span>${n(p.norm)}</span><span>${n(p.used)}</span><span><b>${n(p.left)}</b></span></div>`).join('')}
           </div>` : ''}
         </div>`).join('')}
-      <div class="profile-actions"><button class="btn secondary" onclick="${askHandler}">Спросить у отдела кадров</button></div>
+      ${askHandler ? `<div class="profile-actions"><button class="btn secondary" onclick="${askHandler}">Спросить у отдела кадров</button></div>` : ''}
     </div>`;
 }
 
@@ -4494,6 +4534,7 @@ async function submitLogin(e) {
 async function doLogout() {
   await fetch('/api/logout', { method: 'POST' });
   state.user = null;
+  state._hrBalances = null; state.hrBalSearch = '';
   const m = document.getElementById('main'); if (m) m.innerHTML = '';   // личное с экрана прошлого пользователя не остаётся в странице (09.10.2026)
   showLogin('Вы вышли из портала.');
 }
@@ -6542,8 +6583,9 @@ async function renderHr(main) {
     body = reqs.length ? `<div class="req-list">${reqs.map(r => requestRowHtml(r, true)).join('')}</div>`
       : `<div class="empty"><strong>Заявок пока нет</strong></div>`;
   } else if (tab === 'vacation') {
-    body = vacs.length ? `<div class="req-list">${vacs.map(r => requestRowHtml(r, true)).join('')}</div>`
-      : `<div class="empty"><strong>Заявок по отпуску нет</strong></div>`;
+    body = (vacs.length ? `<div class="req-list">${vacs.map(r => requestRowHtml(r, true)).join('')}</div>`
+      : `<div class="empty"><strong>Заявок по отпуску нет</strong></div>`)
+      + `<div class="section-head hr-bal-head"><div><div class="section-title" style="font-size:20px;">Остатки отпусков</div></div></div><div id="hrBalances" class="no-tr"><div class="loading">Загрузка…</div></div>`;
   } else if (tab === 'staff') {
     body = staffReqs.length ? `<div class="req-list">${staffReqs.map(r => requestRowHtml(r, true)).join('')}</div>`
       : `<div class="empty"><strong>Заявок нет</strong></div>`;
@@ -6612,6 +6654,7 @@ async function renderHr(main) {
     </div>
     <div class="hr-body">${body}</div>`;
   drawHrTelegram('hrTgBox');
+  if (tab === 'vacation') renderHrBalances();
 }
 
 async function markSuggestion(id, status) {

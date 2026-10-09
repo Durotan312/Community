@@ -222,9 +222,17 @@ for _nm, _c, _own in (("админ", ADM, ""), ("HR", HR, ""), ("сотрудн�
         except Exception as _e:  # noqa: BLE001
             continue
         for _m in ("ZZSECRETA73", "ZZSECRETB91", "ZZSECRETN55"):
-            if _m in _body and not (_m == _own and _r == "/api/vacation"):
+            if _m in _body and not (_m == _own and _r == "/api/vacation") and not (_nm in ("админ", "HR") and _r == "/api/hr/vacation-balances"):
                 _leaks.append(f"{_nm} {_r} {_m}")
 check(not _leaks, f"остатки отпусков не отдаёт ни один другой адрес ни одной роли (адресов {len(_rules)}): {_leaks[:5]}")
+# HR и админ видят остатки всех (решение пользователя 09.10.2026), остальные роли — отказ
+_hb = HR.get("/api/hr/vacation-balances")
+check(_hb.status_code == 200 and {"Отпускной Первый", "Отпускной Второй"} <= {p["name"] for p in _hb.get_json()} and _hb.headers.get("Cache-Control") == "no-store"
+      and ADM.get("/api/hr/vacation-balances").status_code == 200, "HR и администратор видят остатки всех сотрудников")
+check(all(c.get("/api/hr/vacation-balances").status_code == 403 for c in (EMP, BUY, UA, UB, HEAD)), "сотрудник, руководитель и закупщик список остатков не получают")
+ADM.post("/api/me/view-as", json={"on": True})
+check(ADM.get("/api/hr/vacation-balances").status_code == 403, "админ в режиме «как сотрудник» список остатков не видит")
+ADM.post("/api/me/view-as", json={"on": False})
 with app.app.app_context():
     check("ZZSECRET" not in app.build_knowledge_base(db), "остатков отпусков нет в базе знаний бота")
     check("ZZSECRET" not in json.dumps(app._prewarm_texts(db), ensure_ascii=False), "остатки отпусков не идут в переводчик")

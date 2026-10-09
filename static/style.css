@@ -3654,3 +3654,15 @@ html{scrollbar-gutter:stable;}
 .vac-bal-row span{min-width:0;overflow-wrap:anywhere;}
 .vac-bal-row span:not(:first-child){text-align:right;}
 @media (max-width:720px){.vac-bal-row{grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr));font-size:12.5px;padding:8px;}.vac-bal-row.head{font-size:10.5px;}}
+
+/* HR-панель → Отпуск: остатки отпусков всех сотрудников, видят HR и админ (09.10.2026) */
+.hr-bal-head{margin-top:26px;}
+.hr-bal-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+.hr-bal-top input{flex:1;min-width:180px;max-width:360px;}
+.hr-bal-date{font-size:12.5px;color:var(--ink-soft);}
+.hr-bal-row{cursor:pointer;}
+.hr-bal-row:hover{border-color:var(--orange);}
+.hr-bal-chip{background:var(--orange-tint);color:var(--orange-dark);white-space:nowrap;}
+.modal .vac-balance{border:0;padding:0;margin:0;}
+.hr-bal-top input{padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;}
+.hr-bal-top input:focus{outline:none;border-color:var(--orange);}

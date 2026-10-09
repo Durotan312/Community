@@ -4664,6 +4664,34 @@ def _vacation_balance(db, user):
     return {"as_of": max(r["loaded"] for r in rows)[:10], "items": items}
 
 
+@app.route("/api/hr/vacation-balances")
+def hr_vacation_balances():
+    """Остатки отпусков всех сотрудников — только отдел кадров и администратор (префикс /api/hr/ остальным закрыт).
+    Решение пользователя 09.10.2026: «HR может видеть остаток отпусков и я как админ — на то она HR». Сотрудник,
+    руководитель, закупщик, бухгалтер и остальные роли по-прежнему видят только свой остаток в «Моём отпуске»."""
+    user = current_user()
+    if not user or user["role"] not in ("admin", "hr"):
+        return jsonify({"error": "Остатки отпусков видит только отдел кадров."}), 403
+    db = get_db()
+    out, by_emp = [], {}
+    for r in db.execute("SELECT b.employee_id, b.company, b.total, b.periods, b.loaded, e.name, e.department, e.position "
+                        "FROM vacation_balance b JOIN employees e ON e.id=b.employee_id ORDER BY e.name, b.rowid"):
+        item = by_emp.get(r["employee_id"])
+        if item is None:
+            item = by_emp[r["employee_id"]] = {"employee_id": r["employee_id"], "name": r["name"], "department": r["department"] or "",
+                                               "position": r["position"] or "", "as_of": r["loaded"][:10], "items": []}
+            out.append(item)
+        try:
+            periods = json.loads(r["periods"] or "[]")
+        except ValueError:
+            periods = []
+        total = r["total"]
+        item["items"].append({"company": r["company"] or "", "total": int(total) if total == int(total) else total, "periods": periods})
+    resp = jsonify(out)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @app.route("/api/vacation")
 def vacation_summary():
     """Личная справка: сколько дней отпуска отмечено в табеле за год. Только про себя."""
