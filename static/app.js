@@ -2306,7 +2306,7 @@ function renderPeople(main) {
         ${l.photo ? `<img class="person-photo" src="${escapeHtml(l.photo)}" alt="">` : `<div class="person-photo-fallback">${initials(l.name)}</div>`}
         <div class="person-name">${escapeHtml(l.name)}</div>
         <div class="person-role">${escapeHtml(l.position || '')}</div>
-        ${l.story ? `<div class="person-extra leader-excerpt">${escapeHtml(l.story.replace(/\s*\n+\s*/g, ' ').slice(0, 140))}${l.story.length > 140 ? '…' : ''}</div><div class="leader-more">Читать →</div>` : ''}
+        ${l.story ? `<div class="person-extra leader-excerpt">${escapeHtml(l.story.replace(/\s*\n+\s*/g, ' ').slice(0, 110))}${l.story.length > 110 ? '…' : ''}</div><div class="leader-more">Читать →</div>` : ''}
       </div>`).join('') + `</div>
     <div class="section-head"><div><div class="section-title" style="font-size:20px;">Все сотрудники</div></div></div>`;
   }
@@ -2452,6 +2452,7 @@ async function submitPerson() {
 // Порядок и коды подразделений — как в официальной оргструктуре.
 const DIVISIONS = [
   ['Коммерция и развитие бизнеса', 'CBDO / TQM'],
+  ['Smart Industry & Infrastructure', 'CBDO / SII'],   // 09.10.2026: подразделение Шарипова Ануара (схема от пользователя)
   ['Технологии',                   'CTO'],
   ['Операции и внедрение',         'COO'],
   ['Региональный офис в Алматы',   'ALMATY'],

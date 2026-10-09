@@ -9,7 +9,7 @@ Telegram-боты из копии убраны, почты локально не
   python checks/sandbox.py stop     — остановить и удалить копию
 
 Учётки (роль → кто это): admin — админ, hr — отдел кадров, buyer — закупщик, accountant — бухгалтер, cfo — финансовый директор (только смотрит),
-emp — сотрудник опер-отдела Шарипов Ануар, head — его директор Повстенко Никита (согласует заявки, ставит задачи).
+emp — сотрудник опер-отдела Аманжолова Сандугаш, head — его директор Повстенко Никита (согласует заявки, ставит задачи).
 
 В сценарии (Playwright):
     import sys; sys.path.insert(0, r"C:\\Users\\Tima\\Desktop\\staff\\checks"); import sandbox
@@ -29,7 +29,7 @@ HOME = os.path.join(tempfile.gettempdir(), "portal-sandbox")
 STATE = os.path.join(HOME, "state.json")
 ROLES = [("admin", "sbx_admin", "Песочница Админ", "admin"), ("hr", "sbx_hr", "Песочница HR", "hr"),
          ("buyer", "sbx_buyer", "Песочница Закупщик", "buyer"), ("accountant", "sbx_acc", "Песочница Бухгалтер", "accountant"), ("cfo", "sbx_cfo", "Песочница Финдиректор", "cfo"),
-         ("emp", "sbx_emp", "Шарипов Ануар", "user"),
+         ("emp", "sbx_emp", "Аманжолова Сандугаш", "user"),
          ("head", "sbx_head", "Повстенко Никита", "user")]
 QUIET_KEYS = ("tg_bot", "tg_staff")          # из копии убираем ботов: тестовые действия не должны писать людям в Telegram
 with contextlib.suppress(AttributeError, ValueError):     # сценарии печатают по-русски — консоль Windows не должна падать

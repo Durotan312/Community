@@ -30,7 +30,7 @@ def client(uid=None):
         ph = db.execute("SELECT password_hash FROM users WHERE id=?", (uid,)).fetchone()[0]
         with c.session_transaction() as s: s["uid"] = uid; s["pv"] = app._pw_stamp(ph)
     return c
-ANON, USER = client(), client(mkuser("sec_user", "Шарипов Ануар"))
+ANON, USER = client(), client(mkuser("sec_user", "Аманжолова Сандугаш"))
 HR, BUY, ADM = client(mkuser("sec_hr", "Сек HR", "hr")), client(mkuser("sec_buy", "Сек Закуп", "buyer")), client(mkuser("sec_adm", "Сек Админ", "admin"))
 ACC = client(mkuser("sec_acc", "Сек Бухгалтер", "accountant"))
 CFO = client(mkuser("sec_cfo", "Сек Финдиректор", "cfo"))

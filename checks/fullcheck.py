@@ -46,7 +46,7 @@ HR = client(mkuser("chk_hr", "Проверка HR", "hr"))
 BUY = client(mkuser("chk_buyer", "Проверка Закупщик", "buyer"))
 ACC = client(mkuser("chk_acc", "Проверка Бухгалтер", "accountant"))
 CFO = client(mkuser("chk_cfo", "Проверка Финдиректор", "cfo"))
-EMP_ID = mkuser("chk_emp", "Шарипов Ануар")                     # сотрудник опер-отдела (согласует Повстенко)
+EMP_ID = mkuser("chk_emp", "Аманжолова Сандугаш")                     # сотрудник опер-отдела (согласует Повстенко)
 EMP = client(EMP_ID)
 HEAD = client(mkuser("chk_head", "Повстенко Никита"))
 ANON = app.app.test_client(); ANON.environ_base["HTTP_X_PORTAL_CHECK"] = "1"
@@ -145,7 +145,7 @@ j = ok(ADM.post("/api/leaders", json={"name": "Проверка", "position": "x
 j = ok(ADM.post("/api/onboarding", json={"title": "Проверка шаг", "description": "x"}), "шаг новичка"); ok(ADM.put(f"/api/onboarding/{j['id']}", json={"title": "Проверка шаг 2"}), "правка шага"); ok(ADM.delete(f"/api/onboarding/{j['id']}"), "удалить шаг")
 about = ADM.get("/api/about").get_json(); ok(ADM.put("/api/about", json=about if isinstance(about, dict) else {}), "«о компании» — сохранение без изменений")
 print("== Профиль «О себе» (07.10.2026)")
-emp_card = db.execute("SELECT id FROM employees WHERE name='Шарипов Ануар'").fetchone()
+emp_card = db.execute("SELECT id FROM employees WHERE name='Аманжолова Сандугаш'").fetchone()
 check(BUY.put("/api/me/profile", json={"about": "x"}).status_code == 400, "учётка без карточки в справочнике профиль не заполняет")
 pr = ok(EMP.put("/api/me/profile", json={"about": "<img src=x onerror=alert(1)> " + "я" * 2000, "edu_school": "ЕНУ", "edu_major": "Информатика", "edu_year": "2019г",
                                           "skills": "1С, Excel, 1с, , Excel", "hobbies": ["футбол", "горы"], "languages": "казахский; английский", "hometown": "Проверкаград"}), "сотрудник заполняет профиль")
@@ -202,7 +202,7 @@ def _bal(emp, total, mark):
     db.execute("INSERT INTO vacation_balance (id, employee_id, company, total, periods, loaded, email) VALUES (?,?,?,?,?,?,?)",
                (uuid.uuid4().hex, emp, "ЧК", total, json.dumps([{"start": "2025-01-01", "end": "2025-12-31", "norm": 24, "order": mark, "used": 1, "left": total}]), _now, em))
 _bal(VA, 73, "ZZSECRETA73"); _bal(VB, 91, "ZZSECRETB91")
-_anuar = db.execute("SELECT id FROM employees WHERE name='Шарипов Ануар'").fetchone()
+_anuar = db.execute("SELECT id FROM employees WHERE name='Аманжолова Сандугаш'").fetchone()
 if _anuar:
     _bal(_anuar["id"], 55, "ZZSECRETN55")           # у EMP учётка без почты, имя совпадает с этой карточкой
 db.commit()
@@ -282,7 +282,7 @@ app.register_mode, app.send_mail = _rm, _sm
 db.execute("DELETE FROM vacation_balance"); db.execute("DELETE FROM employees WHERE id IN (?,?,?,?,?)", (VA, VB, VH, VN, VP))
 db.execute("DELETE FROM users WHERE email LIKE 'vac.%@connectedhome.kz'"); db.commit()
 print("== История заявки с временем (09.10.2026)")
-rl = ok(EMP.post("/api/requests", json={"type": "it", "data": {"full_name": "Шарипов Ануар", "problem": "Не работает принтер, печатает пустые листы"}}), "заявка в поддержку IT подана")
+rl = ok(EMP.post("/api/requests", json={"type": "it", "data": {"full_name": "Аманжолова Сандугаш", "problem": "Не работает принтер, печатает пустые листы"}}), "заявка в поддержку IT подана")
 if rl:
     check("T" in rl["created"] and [e["event"] for e in rl["log"]] == ["created"] and rl["log"][0]["actor"], "у новой заявки время подачи и первый шаг истории")
     r2 = ADM.put(f"/api/requests/{rl['id']}", json={"status": "in_progress", "hr_comment": "Смотрю"}).get_json()
@@ -475,10 +475,10 @@ ok(HR.put(f"/api/suggestions/{j['id']}", json={"status": "seen"}), "HR отме�
 ok(HR.delete(f"/api/suggestions/{j['id']}"), "HR удаляет"); HR.delete(f"/api/suggestions/{a['id']}")
 
 print("== Заявки: все 7 видов, согласование, статусы")
-REQ = {"trip": {"full_name": "Шарипов Ануар", "purpose": "x", "from_city": "Астана", "to_city": "Алматы", "date_start": "2026-10-05", "date_end": "2026-10-06", "transport": "plane"},
-       "equipment": {"full_name": "Шарипов Ануар", "item": "Мышь", "reason": "сломалась"}, "it": {"full_name": "Шарипов Ануар", "problem": "x"},
-       "vacation": {"full_name": "Шарипов Ануар", "purpose": "vacation"}, "unpaid": {"full_name": "Шарипов Ануар", "date_start": "2026-10-01", "date_end": "2026-10-02", "reason": "x"},
-       "dismissal": {"full_name": "Шарипов Ануар", "last_day": "2026-12-01", "reason": "x"},
+REQ = {"trip": {"full_name": "Аманжолова Сандугаш", "purpose": "x", "from_city": "Астана", "to_city": "Алматы", "date_start": "2026-10-05", "date_end": "2026-10-06", "transport": "plane"},
+       "equipment": {"full_name": "Аманжолова Сандугаш", "item": "Мышь", "reason": "сломалась"}, "it": {"full_name": "Аманжолова Сандугаш", "problem": "x"},
+       "vacation": {"full_name": "Аманжолова Сандугаш", "purpose": "vacation"}, "unpaid": {"full_name": "Аманжолова Сандугаш", "date_start": "2026-10-01", "date_end": "2026-10-02", "reason": "x"},
+       "dismissal": {"full_name": "Аманжолова Сандугаш", "last_day": "2026-12-01", "reason": "x"},
        "hiring": {"full_name": "Повстенко Никита", "position": "Инженер", "department": "Операции", "reason": "expand", "duties": "x"}}
 for t, data in REQ.items():
     who = HEAD if t == "hiring" else EMP
@@ -518,7 +518,7 @@ print("== Резюме: учёт, лимит и чужой файл (07.10.2026)
 rup = lambda who, body, name: who.post("/api/resume-upload", data={"file": (io.BytesIO(body), name)}, content_type="multipart/form-data")
 rr = (ok(rup(EMP, pdf, "резюме.pdf"), "сотрудник загружает резюме") or {}).get("url") or ""
 check(db.execute("SELECT user_id FROM resumes WHERE name=?", (rr.rsplit("/", 1)[-1],)).fetchone() is not None, "резюме записано за тем, кто загрузил")
-ref = lambda **kw: EMP.post("/api/requests", json={"type": "referral", "data": dict({"full_name": "Шарипов Ануар", "vacancy": "Инженер", "candidate": "Кандидат", "contact": "x", "resume": rr}, **kw)})
+ref = lambda **kw: EMP.post("/api/requests", json={"type": "referral", "data": dict({"full_name": "Аманжолова Сандугаш", "vacancy": "Инженер", "candidate": "Кандидат", "contact": "x", "resume": rr}, **kw)})
 check(ref(resume="/media/resume-" + "0" * 32 + ".pdf").status_code == 400, "несуществующее резюме не принимается")
 other_r = (rup(HEAD, pdf, "чужое.pdf").get_json() or {}).get("url")
 check(ref(resume=other_r).status_code == 400, "чужое резюме к своей заявке не приложить")
@@ -542,7 +542,7 @@ ok(up(EMP, pdf, "чек.pdf"), "сотрудник загружает чек PDF
 check(up(EMP, b"MZ\x90\x00", "чек.pdf").status_code == 400 and up(EMP, b"<svg></svg>", "чек.svg").status_code == 400
       and up(EMP, b"<html>", "чек.png").status_code == 400, "exe под видом PDF, SVG и не-картинка как чек отклонены")
 check(EMP.get(receipt).status_code == 200 and HEAD.get(receipt).status_code == 403, "до подачи заявки чек открывает только тот, кто его загрузил")
-comp = {"full_name": "Шарипов Ануар", "category": "other", "item": "Картридж", "receipt": receipt}
+comp = {"full_name": "Аманжолова Сандугаш", "category": "other", "item": "Картридж", "receipt": receipt}
 bad = lambda **kw: EMP.post("/api/requests", json={"type": "compensation", "data": dict(comp, **kw)}).status_code
 check(bad(receipt="") == 400 and bad(receipt="/media/receipt-" + "0" * 32 + ".png") == 400 and bad(receipt="/static/uploads/x.png") == 400
       and bad(receipt="https://evil.example/receipt.png") == 400, "без чека, с несуществующим и с чужим адресом вместо чека заявка не принимается")
@@ -705,7 +705,7 @@ check(all(a.get("source") == "check" for a in logs if a["user"].startswith("chk_
 
 print("== Задачник")
 d = ok(HEAD.get("/api/tasks"), "глава: список задач")
-emp_id = db.execute("SELECT id FROM employees WHERE name LIKE 'Шарипов%'").fetchone()[0]
+emp_id = db.execute("SELECT id FROM employees WHERE name LIKE 'Аманжолова%'").fetchone()[0]
 check(d["can_assign"] and any(e["id"] == emp_id for e in d["team"]), "глава может ставить задачи своему сотруднику")
 t = ok(HEAD.post("/api/tasks", json={"title": "Проверка задачи", "description": "текст", "due": today, "assignee_id": emp_id}), "глава: поставить задачу")
 tid = t["id"]

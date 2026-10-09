@@ -3717,3 +3717,10 @@ html[data-theme="dark"] .req-type-badge{color:#FFB27A;}
 .adm-row.long{flex-direction:column;align-items:flex-start;gap:2px;}
 .adm-row.long b{text-align:left;}
 a.icon-btn{text-decoration:none;}
+/* 09.10.2026: восьмое подразделение (Smart Industry & Infrastructure) — плитки руководителей на Road Map в один ряд */
+@media (min-width:861px){ .org-heads{grid-template-columns:repeat(auto-fit,minmax(112px,1fr));} }
+/* блок «Руководители»: семь карточек — по четыре в ряд, неполный ряд по центру, без одинокой карточки слева */
+@media (min-width:1101px){
+  .people-leaders{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;}
+  .people-leaders > .person-card{flex:0 0 calc((100% - 36px) / 4);min-width:0;box-sizing:border-box;}
+}
