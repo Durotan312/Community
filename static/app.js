@@ -566,6 +566,7 @@ function renderSideWidgets() {
   // меряем после того, как render() переключит раскладку: при переходе из Road Map / Посещаемости колонка ещё скрыта,
   // размеры нулевые — и книга вставала во весь рост (замечено на «Сотрудниках» и «Моём отпуске», 24.09.2026)
   requestAnimationFrame(fitBookCover);
+  bookAutoStart();
 }
 
 // «К рассмотрению» — только тем, кто ведёт заявки: HR, закупщик, админ. Показывается, когда есть что разбирать.
@@ -620,12 +621,30 @@ function inboxWidgetHtml() {
 // 09.10.2026: книги от всех руководителей, листаются стрелками (слова пользователя: «не только от CEO, но и от директоров,
 // чтобы можно было листать и смотреть, какой директор какую книгу советует»). Текущая — state.bookIdx.
 function curBook() { const list = state.books || []; if (!list.length) return null; state.bookIdx = ((state.bookIdx || 0) % list.length + list.length) % list.length; return list[state.bookIdx]; }
-function bookShift(d) {                           // меняется только блок книги, страница не перерисовывается (09.10.2026)
+function bookShift(d, auto) {                     // меняется только блок книги, страница не перерисовывается (09.10.2026)
   state.bookIdx = (state.bookIdx || 0) + d; curBook();
   const el = document.querySelector('.widget-book');
   if (!el) { render(); return; }
+  // размер карточки не пересчитываем: новая обложка получает те же ширину, высоту и режим, что у прежней — ничего не прыгает
+  const prev = el.querySelector('.book-cover'), row = el.classList.contains('book-row');
+  const size = prev ? { w: prev.style.width, h: prev.style.height } : null;
   el.outerHTML = bookWidgetHtml();
-  fitBookCover();
+  const card = document.querySelector('.widget-book'), img = card && card.querySelector('.book-cover');
+  if (card && row) card.classList.add('book-row');
+  if (img && size) { img.style.width = size.w; img.style.height = size.h; }
+  if (!auto) bookAutoStart();                       // после ручного клика отсчёт 5 секунд начинается заново
+}
+// книги листаются сами раз в 5 секунд (09.10.2026, просьба пользователя); наведение мышью, открытое окно
+// и свёрнутая вкладка браузера ставят отсчёт на паузу
+function bookAutoStart() {
+  clearInterval(bookAutoStart._t);
+  if ((state.books || []).length < 2) return;
+  bookAutoStart._t = setInterval(() => {
+    const el = document.querySelector('.widget-book');
+    if (!el) { clearInterval(bookAutoStart._t); return; }
+    if (document.hidden || el.matches(':hover') || document.body.classList.contains('modal-open')) return;
+    bookShift(1, true);
+  }, 5000);
 }
 function bookByLine(b) { return `Советует ${escapeHtml((b.by || '').split(' ').slice(-1)[0] || b.by || '')}${b.by_position ? ' · ' + escapeHtml(b.by_position.split(' — ')[0].split(' / ')[0]) : ''}`; }
 function bookWidgetHtml() {
