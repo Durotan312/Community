@@ -1892,8 +1892,8 @@ setInterval(() => {
 // девиз компании — слова пользователя 09.10.2026, дословно
 const MOTTO = 'Наша главная сила — в людях, а наши возможности ограничены только масштабом нашего мышления.';
 
-// Главная (вид выбран пользователем 09.10.2026 из присланных снимков): баннер с девизом, дугами из логотипа и четырьмя цифрами;
-// в светлой теме он персиковый с белыми кольцами, в тёмной — тёмный с оранжевыми дугами. Ниже — подразделения строкой плашек.
+// Главная (вид выбран пользователем 09.10.2026 из присланных снимков): баннер с девизом и четырьмя цифрами
+// (персиковый в светлой теме, тёмный в тёмной; дуги убраны по его слову в тот же день). Ниже — подразделения сеткой: число, название, код.
 // Кольцевая диаграмма, полоски и дерево были раньше и отвергнуты — не возвращать.
 function divisionCounts() {
   const counts = {};
@@ -1917,7 +1917,6 @@ function heroHtml() {
   ].filter(k => k[0] > 0);
   return `
     <div class="home-hero">
-      <svg class="home-arcs" aria-hidden="true">${[90, 170, 250, 330, 410, 490].map(r => `<circle cx="100%" cy="100%" r="${r}" fill="none"/>`).join('')}</svg>
       <div class="home-hero-in">
         <div class="home-date">${dateStr[0].toUpperCase() + dateStr.slice(1)} · ${greet}, Connected Home!</div>
         <div class="home-motto">${escapeHtml(MOTTO).replace('в людях', '<em>в людях</em>')}</div>
@@ -1934,9 +1933,10 @@ function statsHtml() {
   return `
     <div class="home-divs">
       ${rows.map(([name, n]) => `
-        <span class="home-div" onclick="state.orgCollapsed=null;goToView('org');setTimeout(()=>openOrgDiv(${jsArg(name)}),50)">
-          <i>${escapeHtml(code[name] || 'CEO')}</i>${escapeHtml(name)}<b>${n}</b>
-        </span>`).join('')}
+        <div class="home-div" onclick="state.orgCollapsed=null;goToView('org');setTimeout(()=>openOrgDiv(${jsArg(name)}),50)">
+          <b>${n}</b>
+          <div class="home-div-text"><span class="home-div-name">${escapeHtml(name)}</span><i>${escapeHtml(code[name] || 'CEO')}</i></div>
+        </div>`).join('')}
     </div>`;
 }
 
