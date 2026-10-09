@@ -1918,6 +1918,14 @@ function heroHtml() {
     const days = Math.round((new Date(nextEv.date) - today) / 86400000);
     evChip = `<div class="hero-chip" onclick="goToView('events')">${days === 0 ? 'Сегодня' : days === 1 ? 'Завтра' : `Через ${days} ${pluralRu(days, 'день', 'дня', 'дней')}`} — ${escapeHtml(nextEv.title)}</div>`;
   }
+  // цифры компании — в баннере, одним блоком с девизом (второй вариант главной, 09.10.2026)
+  const staff = state.employees.length, divs = divisionCounts().length, parts = state.partners.length;
+  const kpis = [
+    [staff, pluralRu(staff, 'сотрудник', 'сотрудника', 'сотрудников'), 'people'],
+    [divs, pluralRu(divs, 'подразделение', 'подразделения', 'подразделений'), 'org'],
+    [state.projects.length, pluralRu(state.projects.length, 'проект', 'проекта', 'проектов'), 'projects'],
+    [parts, pluralRu(parts, 'партнёр', 'партнёра', 'партнёров'), 'partners'],
+  ].filter(k => k[0] > 0);
   return `
     <div class="hero">
       <div class="hero-blob a"></div><div class="hero-blob b"></div>
@@ -1927,48 +1935,38 @@ function heroHtml() {
         <div class="hero-motto">${escapeHtml(MOTTO)}</div>
         <div class="hero-chips">${bdText ? `<div class="hero-chip" onclick="goToView('people')">${bdText}</div>` : ''}${evChip}</div>
       </div>
-      <!-- цифры компании живут в дереве ниже, чтобы не дублировать их дважды на одном экране -->
+      <div class="hero-stats">
+        ${kpis.map(([n, label, view]) => `<div class="hero-stat" onclick="goToView(${jsArg(view)})"><b data-count="${n}">0</b><span>${label}</span></div>`).join('')}
+      </div>
     </div>`;
 }
 
-// «Компания в цифрах» (09.10.2026, слова пользователя: «вместо круга… сделай по-другому, я посмотрю»):
-// четыре крупные цифры и плитки подразделений. Кольцо убрано; полоски и дерево отвергнуты раньше — не возвращать.
-function statsHtml() {
+// Главная, второй вариант (09.10.2026, слова пользователя: «какой-нибудь другой вид главного экрана»):
+// цифры компании стоят в баннере рядом с девизом (heroHtml), здесь — только подразделения строками в три колонки.
+// Кольцо, полоски и дерево были раньше и отвергнуты — не возвращать.
+function divisionCounts() {
   const counts = {};
   state.employees.forEach(e => {
     const d = e.department;
     if (!d || d === 'Без отдела') return;
     counts[d] = (counts[d] || 0) + 1;
   });
-  const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+}
+function statsHtml() {
+  const rows = divisionCounts();
   if (!rows.length) return '';
   const code = Object.fromEntries((typeof DIVISIONS !== 'undefined' ? DIVISIONS : []).map(([n, c]) => [n, c]));
-  const staff = state.employees.length, parts = state.partners.length;
-  const kpis = [
-    [staff, pluralRu(staff, 'сотрудник', 'сотрудника', 'сотрудников'), 'people'],
-    [rows.length, pluralRu(rows.length, 'подразделение', 'подразделения', 'подразделений'), 'org'],
-    [state.projects.length, pluralRu(state.projects.length, 'проект', 'проекта', 'проектов'), 'projects'],
-    [parts, pluralRu(parts, 'партнёр', 'партнёра', 'партнёров'), 'partners'],
-  ].filter(k => k[0] > 0);
-
   return `
     <div class="stats">
-      <div class="stats-title">Компания в цифрах</div>
-      <div class="kpi-row">
-        ${kpis.map(([n, label, view]) => `
-          <div class="kpi" onclick="goToView(${jsArg(view)})">
-            <b data-count="${n}">0</b><span>${label}</span>
-          </div>`).join('')}
-      </div>
+      <div class="stats-title">Подразделения</div>
       <div class="divs-grid">
         ${rows.map(([name, n], i) => `
           <div class="divs-tile" style="animation-delay:${(0.15 + i * 0.05).toFixed(2)}s"
                onclick="state.orgCollapsed=null;goToView('org');setTimeout(()=>openOrgDiv(${jsArg(name)}),50)">
-            <div class="divs-top">
-              <span class="org-code">${escapeHtml(code[name] || 'CEO')}</span>
-              <b>${n}</b>
-            </div>
-            <div class="divs-name">${escapeHtml(name)}</div>
+            <span class="org-code">${escapeHtml(code[name] || 'CEO')}</span>
+            <span class="divs-name">${escapeHtml(name)}</span>
+            <b>${n}</b>
           </div>`).join('')}
       </div>
     </div>`;
